@@ -37,7 +37,8 @@ def main():
     bv = Jauge(id, nom, dossier, fichier)
 
     watershed = Pre_Process(
-        example_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo",
+        #example_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo",
+        example_path=r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
         data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
         results_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
         basin_name=nom,
