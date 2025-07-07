@@ -26,7 +26,8 @@ import whitebox
 wbt = whitebox.WhiteboxTools()
 wbt.verbose = False
 
-def pre_process_watershed(data) :
+def pre_process_watershed(example_path: str, data_path: str, results_path: str, basin_name: str, x: float, y: float, dem_raster: str,
+                          hydrometry_csv: str, year_start: int, year_end: int, example_year: int) -> None:
 
     # ROOT DIRECTORY
 
@@ -47,12 +48,12 @@ def pre_process_watershed(data) :
 
     #TODO MODIFIER TOUTE LA CELLULE POUR ADAPTER COM A TEST.PY
     #example_path = os.path.join(root_dir, 'Enzo')
-    example_path = data[0]
+    example_path = example_path
     #data_path = os.path.join(example_path, 'data')
-    data_path = data[1]
+    data_path = data_path
 
     #out_path = os.path.join(root_dir,'Enzo','results')
-    out_path = data[2]
+    out_path = results_path
 
     print('The exemple directory is here :', example_path)
     print('The data comes from here :', data_path)
@@ -64,7 +65,7 @@ def pre_process_watershed(data) :
     #TODO Nom et variables
     #watershed_name = 'Nancon' 
     #model_name = watershed_name
-    watershed_name = data[3] 
+    watershed_name = basin_name
     print('##### '+watershed_name.upper()+' #####')
     #first_year=2000
     #last_year=2021
@@ -73,12 +74,12 @@ def pre_process_watershed(data) :
     #x = 389285.910
     #y = 6816518.749
 
-    x = float(data[4])
-    y = float(data[5])
+    x = x
+    y = y
 
     # Regional DEM
     #dem_path = os.path.join(data_path, 'regional dem.tif')
-    dem_path = data[6]
+    dem_path = dem_raster
 
     # Outlet coordinates of the catchment
     from_xyv = [x,y, 150, 10 , 'EPSG:2154']
@@ -129,7 +130,7 @@ def pre_process_watershed(data) :
 
     #TODO noms du csv
     #csv_name = 'hydrometry catchment Nancon.csv'
-    csv_name = data[7]
+    csv_name = hydrometry_csv
     Qobs = pd.read_csv(data_path+'/'+csv_name, sep=';', index_col=0, parse_dates=True)
     Qobs = Qobs.squeeze()
     Qobs = Qobs.rename('Q')
@@ -140,8 +141,8 @@ def pre_process_watershed(data) :
 
     #first = 1990
     #last = 2021 #TODO VARIABLES
-    first = float(data[8])
-    last = float(data[9])
+    first = year_start
+    last = year_end
 
     Qobs = select_period(Qobs, first, last)
     Qobs = (Qobs / (area*1000000)) * (3600 * 24) * 1000 # m3/s to mm/j
@@ -191,7 +192,7 @@ def pre_process_watershed(data) :
     ax.grid(alpha=0.25, zorder=0)
 
     #one = 2020 #TODO VARIABLE 
-    one = float(data[10])
+    one = example_year
 
     dates = np.array([one],dtype=np.int64)
     colors = ['blue']
@@ -246,11 +247,30 @@ if __name__ == "__main__":
         description="Fournit les data nécessaires au lancement de watershed"
     )
 
-    parser.add_argument(
-        "data",
-        nargs="+",
-        help="Liste de données str et float variables de watershed"
-    )
+    parser.add_argument("example_path")
+    parser.add_argument("data_path")
+    parser.add_argument("results_path")
+    parser.add_argument("basin_name")
+    parser.add_argument("x", type=float)
+    parser.add_argument("y", type=float)
+    parser.add_argument("dem_raster")
+    parser.add_argument("hydrometry_csv")
+    parser.add_argument("year_start", type=int)
+    parser.add_argument("year_end", type=int)
+    parser.add_argument("example_year", type=int)
+    
     args = parser.parse_args()
 
-    pre_process_watershed(args.data)
+    pre_process_watershed(
+        example_path     = args.example_path,
+        data_path        = args.data_path,
+        results_path     = args.results_path,
+        basin_name       = args.basin_name,
+        x                = args.x,
+        y                = args.y,
+        dem_raster       = args.dem_raster,
+        hydrometry_csv   = args.hydrometry_csv,
+        year_start       = args.year_start,
+        year_end         = args.year_end,
+        example_year     = args.example_year
+    )

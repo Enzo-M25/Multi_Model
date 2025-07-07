@@ -1,16 +1,18 @@
   
 import pandas as pd
+import numpy as np
 
 from Jauge import Jauge
 from Model_folder.RL import RL
 from Model_folder.GR4J import GR4J
+from Model_folder.HydroModPy import HydroModPy
 from Choix import Choix
 from Pre_process import Pre_Process
 from Post_process import Outputs
 
 import os
 from os.path import dirname, abspath
-from datetime import datetime
+from datetime import datetime, date
 
 def parse_date(d:str) -> datetime :
     """
@@ -29,11 +31,11 @@ def parse_date(d:str) -> datetime :
         raise ValueError(f"Format invalide pour la date : {d} (attendu YYYY-MM-DD)")
 
 def main():
-    #root_directory = dirname(dirname(abspath(__file__))) #AAAAAAAAAAAAAAAAAAAAA
-    id = "CAMELS_FR_tsd_J001401001"
-    nom = "Nancon"
+    
+    id = "CAMELS_FR_tsd_J721401001"
+    nom = "Flume_nse_log_classique"
     dossier = "C:\\Users\\enzma\\Documents\\rennes 1\\M2\\Semestre 2\\Stage\\codes_matlab_resev_lin\\stations"
-    fichier = "CAMELS_FR_tsd_J001401001.csv"
+    fichier = "CAMELS_FR_tsd_J721401001.csv"
     bv = Jauge(id, nom, dossier, fichier)
 
     watershed = Pre_Process(
@@ -42,18 +44,18 @@ def main():
         data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
         results_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
         basin_name=nom,
-        x=389285.910,
-        y=6816518.749,
+        x=344966,
+        y=6797471,
         dem_raster=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\regional dem.tif",
-        hydrometry_csv=r"hydrometry catchment Nancon.csv",
-        year_start=1990,
-        year_end=2021,
-        example_year=2020
+        hydrometry_csv=r"J721401001_QmnJ(n=1_non-glissant).csv",
+        year_start=2010,
+        year_end=2010,
+        example_year=2010
     )
 
     #watershed.pre_processing()
 
-    fct_calib = "crit_NSE_log"
+    fct_calib = "crit_NSE"
 
     transfo = [""]
     dict_crit = {"crit_NSE": 0.5,"crit_KGE": 0.5}
@@ -73,16 +75,18 @@ def main():
     model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
     model1.param_calib(bv)
     print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
     print(f"  Alpha      : {model1.alpha}")
     print(f"  Vmax       : {model1.Vmax}")
     print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
     print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
     print("===============================\n")
     mac.add_model(model1)
-    """
+    
     model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
     model2.param_calib(bv)
     print("\n=== Résultats du modèle GR4J ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
     print(f"{fct_calib} calibration : {model2.crit_calib:.4f}")
     print(f"{fct_calib} validation : {model2.crit_valid:.4f}")
     print("Paramètres calibrés :")
@@ -90,6 +94,21 @@ def main():
         print(f"  X{i} : {val}")
     print("===============================\n")
     mac.add_model(model2)
+    """
+    
+    model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
+                        dict_crit=None)
+    model3.param_calib(watershed, 'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA")
+    
+    print("\n=== Résultats du modèle HydroModPy ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
+    #print(f"{fct_calib} validation : {model2.crit_valid:.4f}")
+    print("Paramètres calibrés :")
+    print(f"  Sy      : {model3.sy}")
+    print(f"  hk(m/s) : {model3.hk}")
+    print("===============================\n")
+    #mac.add_model(model3)
     
     try :
         best = mac.comparaison_models(fct_calib) # best est une liste de model
@@ -103,8 +122,13 @@ def main():
             result = Outputs(id,nom,d,Q_sim)
             result.affiche()
 
+            if (len(Q_sim) != len(bv.serie_debit(t_prev_start,t_prev_end))) :
+                raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
+
             result_compar = Outputs(id,nom,d,Q_sim,bv.serie_debit(t_prev_start,t_prev_end))
             result_compar.affiche()
+
+            result_compar.affiche_nuage()
 
     except ValueError as e :
         print(f"Erreur lors de la sélection du modèle : {e}")

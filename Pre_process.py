@@ -28,7 +28,7 @@ class Pre_Process:
                  env_root: str = r"C:\ProgramData\anaconda3\envs\hydromodpy-0.1"
                 ) :
         
-        # Données d'entrée
+        # Données membres
         self.example_path = example_path
         self.data_path = data_path
         self.results_path = results_path
@@ -80,7 +80,7 @@ class Pre_Process:
             str(self.example_year)
         ]
         
-        cmd = [self.python_exe, script_path] + str_args
+        cmd = [self.python_exe, script_path, *str_args]
         
         result = subprocess.run(
             cmd,

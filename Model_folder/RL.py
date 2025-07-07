@@ -105,7 +105,7 @@ class RL(Model) :
         list_Vmax  = np.arange(1, 550, 1)       
 
         delta_t = 1.0
-        N = len(d)
+        N = len(Q)
 
         # Pré‑allocation des résultats
         crit_mat   = np.zeros((len(list_alpha), len(list_Vmax)))
@@ -217,7 +217,7 @@ class RL(Model) :
 
         v0 = self.Vmax/2
         delta_t = 1.0
-        N = len(d)
+        N = len(Q)
 
         exp_alpha = np.exp(-self.alpha * delta_t)
         coeff_R   = (1 - exp_alpha) / self.alpha

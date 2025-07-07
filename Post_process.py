@@ -145,3 +145,33 @@ class Outputs :
         fig.savefig(filename, dpi=300, bbox_inches="tight")
         plt.close(fig)
         
+
+    def affiche_nuage(self) -> None:
+        """
+        
+        """
+
+        fig, (a0, a1) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},figsize=(10,3))
+        ax = a0
+        ax.plot(self.dates, self.Q_obs, color='k', lw=1, ls='-', zorder=0, label='observed')
+        ax.plot(self.dates, self.Q_pred, color='red', lw=1, label='modeled')
+
+        # ax.plot(Rmod.index, Rmod*1000, color='blue', lw=2.5)
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Q / A [mm/month]')
+        ax.set_yscale('log')
+
+
+        ax = a1
+        ax.scatter(self.Q_obs, self.Q_pred,
+                    s=25, edgecolor='none', alpha=0.75, facecolor='forestgreen')
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.plot((0.0001,100),(0.0001,100), color='grey', zorder=-1)
+        ax.set_xlim(0.0001,100)
+        ax.set_ylim(0.0001,100)  
+        ax.set_xlabel('$Q_{obs}$ / A [mm/month]', fontsize=12)
+        ax.set_ylabel('$Q_{sim}$ / A [mm/month]', fontsize=12)
+        fig.tight_layout()
+
+        plt.show()
