@@ -33,10 +33,9 @@ def parse_date(d:str) -> datetime :
 def main():
     
     id = "CAMELS_FR_tsd_J721401001"
-    nom = "Flume_nse_log_classique"
+    nom = "Flume"
     dossier = "C:\\Users\\enzma\\Documents\\rennes 1\\M2\\Semestre 2\\Stage\\codes_matlab_resev_lin\\stations"
     fichier = "CAMELS_FR_tsd_J721401001.csv"
-    bv = Jauge(id, nom, dossier, fichier)
 
     watershed = Pre_Process(
         #example_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo",
@@ -53,12 +52,14 @@ def main():
         example_year=2010
     )
 
+    bv = Jauge(id, nom, dossier, fichier, watershed)
+
     #watershed.pre_processing()
 
     fct_calib = "crit_NSE"
 
     transfo = [""]
-    dict_crit = {"crit_NSE": 0.5,"crit_KGE": 0.5}
+    dict_crit = {"crit_KGE": 0.5, "crit_NSE": 0.5}
 
     t_calib_start = parse_date("2005-01-01")
     t_calib_end = parse_date("2010-12-31")
@@ -71,7 +72,7 @@ def main():
         raise ValueError(f"Format invalide pour une période, début et fin inversé")
 
     mac = Choix()
-    """
+    
     model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
     model1.param_calib(bv)
     print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
@@ -94,21 +95,20 @@ def main():
         print(f"  X{i} : {val}")
     print("===============================\n")
     mac.add_model(model2)
-    """
+    
     
     model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-                        dict_crit=None)
-    model3.param_calib(watershed, 'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA")
-    
+                        'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+    model3.param_calib(bv)
     print("\n=== Résultats du modèle HydroModPy ===")
     print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
     print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    #print(f"{fct_calib} validation : {model2.crit_valid:.4f}")
+    print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
     print("Paramètres calibrés :")
     print(f"  Sy      : {model3.sy}")
     print(f"  hk(m/s) : {model3.hk}")
     print("===============================\n")
-    #mac.add_model(model3)
+    mac.add_model(model3)
     
     try :
         best = mac.comparaison_models(fct_calib) # best est une liste de model
@@ -122,12 +122,14 @@ def main():
             result = Outputs(id,nom,d,Q_sim)
             result.affiche()
 
-            if (len(Q_sim) != len(bv.serie_debit(t_prev_start,t_prev_end))) :
+            if (len(Q_sim) == len(bv.serie_debit(t_prev_start,t_prev_end))) :
+                result_compar = Outputs(id,nom,d,Q_sim,bv.serie_debit(t_prev_start,t_prev_end))
+            elif (len(Q_sim) == len(bv.serie_debit_mensuel(t_prev_start,t_prev_end))) :
+                result_compar = Outputs(id,nom,d,Q_sim,bv.serie_debit_mensuel(t_prev_start,t_prev_end))
+            else :
                 raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
 
-            result_compar = Outputs(id,nom,d,Q_sim,bv.serie_debit(t_prev_start,t_prev_end))
             result_compar.affiche()
-
             result_compar.affiche_nuage()
 
     except ValueError as e :

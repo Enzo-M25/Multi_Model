@@ -116,6 +116,10 @@ def crit_nselog(simulations, evaluation):
     """
     
     """
+
+    simulations = 0.01 * simulations
+    evaluation = 0.01 * evaluation
+
     nselog = 1 - (
             np.sum((np.log(evaluation) - np.log(simulations)) ** 2, axis=0, dtype=np.float64)
             / np.sum((np.log(evaluation) - np.mean(np.log(evaluation))) ** 2, dtype=np.float64)
@@ -355,9 +359,6 @@ def erreur_modele_norm(params_norm, compt, sy_min_max, loghk_min_max, BV, thick,
             crit = he.evaluator(evaluation, Qmod_stat, Qobs_stat, transform=elem)[0][0]    
         else :
             crit = he.evaluator(evaluation, Qmod_stat, Qobs_stat, transform=elem)[0]
-            # res = he.evaluator(evaluation, Qmod_stat, Qobs_stat, transform=elem) #TODO
-            # crit = np.atleast_1d(res)[0]
-
 
     print(f'{fct_calib} : {crit}')
 
@@ -451,7 +452,8 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
     # Name of the study site
 
-    watershed_name = '_'.join([study_site,str(first_year),str(last_year)])
+    #watershed_name = '_'.join([study_site,str(first_year),str(last_year)])
+    watershed_name = '_'.join([study_site])
 
     print('##### '+watershed_name.upper()+' #####')
 
@@ -838,19 +840,6 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
             }
         }
 
-
-    # ######################### Créer un dataframe pour les Qmod obs voir : et au dessus
-    #     "date" : 
-    #        "Qmod" : 
-    #        "Qobs" :
-    #             Qmod_Qobs ={
-    #     'Qmod': Qmod,
-    #     'Qobs': Qobsmonthmm,
-    # }
-    
-    # all_Qmod_Qobs_results.append(Qmod_Qobs)
-    # pd.DataFrame(all_Qmod_Qobs_results).to_csv(os.path.join(optim_folder,'all_Qmod_Qosb_results.csv'))
-
         # Create optimization results folder if it doesn't exist
         optim_df = pd.DataFrame([optim_results])
         optim_df.to_csv(os.path.join(optim_folder, f'optimization_results.csv'), index=False)
@@ -1000,10 +989,10 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     # ax.set_ylim(0.1,300)    
     ax.set_xlabel('$Q_{obs}$ / A [mm/month]', fontsize=12)
     ax.set_ylabel('$Q_{sim}$ / A [mm/month]', fontsize=12)
-    fig.tight_layout()
+    #fig.tight_layout()
                 
     fig.savefig(os.path.join(simulations_folder, '_figures',
-                'STREAMFLOW_'+model_name+'.png'),
+                'calibration'+'.png'),
                 bbox_inches='tight')
     
 
@@ -1038,37 +1027,37 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
     plt.close('all')
 
-    # 1. Collecter récursivement tous les fichiers PNG
-    all_png_files = []
-    for root, dirs, files in os.walk(figures_folder):
-        for file in files:
-            if file.lower().endswith('.png'):
-                full_path = os.path.join(root, file)
-                all_png_files.append(full_path)
+    # # 1. Collecter récursivement tous les fichiers PNG
+    # all_png_files = []
+    # for root, dirs, files in os.walk(figures_folder):
+    #     for file in files:
+    #         if file.lower().endswith('.png'):
+    #             full_path = os.path.join(root, file)
+    #             all_png_files.append(full_path)
 
-    # 2. Afficher chaque image dans une fenêtre séparée
-    for i, img_path in enumerate(all_png_files):
-        try:
-            # Créer une nouvelle figure avec un numéro explicite
-            fig = plt.figure(i+1)
+    # # 2. Afficher chaque image dans une fenêtre séparée
+    # for i, img_path in enumerate(all_png_files):
+    #     try:
+    #         # Créer une nouvelle figure avec un numéro explicite
+    #         fig = plt.figure(i+1)
             
-            # Charger et afficher l'image
-            img = Image.open(img_path)
-            plt.imshow(img)
-            plt.axis('off')
-            plt.tight_layout()
+    #         # Charger et afficher l'image
+    #         img = Image.open(img_path)
+    #         plt.imshow(img)
+    #         plt.axis('off')
+    #         plt.tight_layout()
             
-            # Afficher la fenêtre
-            plt.show(block=True)
-            plt.pause(0.1)  # Petite pause pour assurer le rendu
+    #         # Afficher la fenêtre
+    #         plt.show(block=True)
+    #         plt.pause(0.1)  # Petite pause pour assurer le rendu
             
-            # Attendre que l'utilisateur ferme la fenêtre
-            while plt.fignum_exists(i+1):
-                plt.pause(0.5)
+    #         # Attendre que l'utilisateur ferme la fenêtre
+    #         while plt.fignum_exists(i+1):
+    #             plt.pause(0.5)
             
-        except Exception as e:
-            print(f"Erreur avec {img_path}: {str(e)}")
-            plt.close(i+1)
+    #     except Exception as e:
+    #         print(f"Erreur avec {img_path}: {str(e)}")
+    #         plt.close(i+1)
 
 
 if __name__ == "__main__": 

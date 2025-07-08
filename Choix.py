@@ -44,7 +44,7 @@ class Choix :
         
         # Configuration pour chaque critère (à adapter selon vos besoins)
         criteria_config = {
-            'crit_NSE': {'objective': 'maximize', 'threshold': 0.1},
+            'crit_NSE': {'objective': 'maximize', 'threshold': 0.3},
             'crit_NSE_log': {'objective': 'maximize', 'threshold': 0.1},
             'crit_KGE': {'objective': 'maximize', 'threshold': 0.1},
             'crit_RMSE': {'objective': 'minimize', 'threshold': 0.5}, #TODO 
@@ -72,7 +72,7 @@ class Choix :
                 continue
 
             # Évaluation de la performance
-            current_value = model.crit_calib
+            current_value = model.crit_calib #TODO 0.5 * calib + 0.5 * valid ?
             if (config['objective'] == 'maximize' and current_value > best_value) or \
             (config['objective'] == 'minimize' and current_value < best_value) or \
             (config['objective'] == 'zero' and abs(current_value) < abs(best_value)):

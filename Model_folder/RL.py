@@ -100,8 +100,8 @@ class RL(Model) :
         R = P-E
 
         # Paramètres
-        #list_alpha = np.arange(0.0001, 0.5001, 0.0005)
-        list_alpha = np.arange(0.0001, 0.5001, 0.01)
+        list_alpha = np.arange(0.0001, 0.5001, 0.0005)
+        #list_alpha = np.arange(0.0001, 0.5001, 0.01)
         list_Vmax  = np.arange(1, 550, 1)       
 
         delta_t = 1.0
