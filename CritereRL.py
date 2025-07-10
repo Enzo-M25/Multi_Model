@@ -17,8 +17,8 @@ class CritereRL :
         if Q_obs.shape != Q_sim.shape:
             raise ValueError("Q_obs et Q_sim doivent avoir la même longueur")
 
-        self.Q_obs = Q_obs.astype(float)
-        self.Q_sim = Q_sim.astype(float)
+        self.Q_obs = Q_obs
+        self.Q_sim = Q_sim
 
     def crit_NSE(self) -> float :
         """
@@ -47,6 +47,7 @@ class CritereRL :
         sim = self.Q_sim + eps
         log_obs = np.log(obs)
         log_sim = np.log(sim)
+
         num = np.sum((log_obs - log_sim) ** 2)
         den = np.sum((log_obs - np.mean(log_obs)) ** 2)
         return 1 - num / den

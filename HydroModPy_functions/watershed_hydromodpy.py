@@ -26,33 +26,33 @@ import whitebox
 wbt = whitebox.WhiteboxTools()
 wbt.verbose = False
 
+# ROOT DIRECTORY
+
+from os.path import dirname, abspath
+root_dir = r"C:\USERS\enzma\Documents\HydroModPy"
+sys.path.append(root_dir)
+print("Root path directory is: {0}".format(root_dir.upper()))
+
+# HYDROMODPY MODULES
+
+#import src
+import importlib
+from src import watershed_root
+from src.watershed import climatic, geographic, geology, hydraulic, hydrography, hydrometry, intermittency, oceanic, piezometry, subbasin
+from src.display import visualization_watershed, visualization_results, export_vtuvtk
+from src.tools import toolbox, folder_root
+fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
+
+
+def select_period(df, first, last):
+        df = df[(df.index.year>=first) & (df.index.year<=last)]
+        return df
+
 def pre_process_watershed(example_path: str, data_path: str, results_path: str, basin_name: str, x: float, y: float, dem_raster: str,
                           hydrometry_csv: str, year_start: int, year_end: int, example_year: int) -> None:
 
-    # ROOT DIRECTORY
-
-    from os.path import dirname, abspath
-    root_dir = r"C:\USERS\enzma\Documents\HydroModPy"
-    sys.path.append(root_dir)
-    print("Root path directory is: {0}".format(root_dir.upper()))
-
-    # HYDROMODPY MODULES
-
-    #import src
-    import importlib
-    from src import watershed_root
-    from src.watershed import climatic, geographic, geology, hydraulic, hydrography, hydrometry, intermittency, oceanic, piezometry, subbasin
-    from src.display import visualization_watershed, visualization_results, export_vtuvtk
-    from src.tools import toolbox, folder_root
-    fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
-
-    #TODO MODIFIER TOUTE LA CELLULE POUR ADAPTER COM A TEST.PY
-    #example_path = os.path.join(root_dir, 'Enzo')
     example_path = example_path
-    #data_path = os.path.join(example_path, 'data')
     data_path = data_path
-
-    #out_path = os.path.join(root_dir,'Enzo','results')
     out_path = results_path
 
     print('The exemple directory is here :', example_path)
@@ -62,23 +62,11 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
 
 
     # Name of the study site
-    #TODO Nom et variables
-    #watershed_name = 'Nancon' 
-    #model_name = watershed_name
+    
     watershed_name = basin_name
     print('##### '+watershed_name.upper()+' #####')
-    #first_year=2000
-    #last_year=2021
-    #time_step='D'
-
-    #x = 389285.910
-    #y = 6816518.749
-
-    x = x
-    y = y
 
     # Regional DEM
-    #dem_path = os.path.join(data_path, 'regional dem.tif')
     dem_path = dem_raster
 
     # Outlet coordinates of the catchment
@@ -126,21 +114,18 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
     fig_dir = os.path.join(out_path, watershed_name, 'results_stable', '_figures')
     hydrometry_fig_dir = os.path.join(fig_dir, 'hydrometry')
 
+    #TODO
 
+    Qobs = pd.read_csv(data_path+'/'+hydrometry_csv, sep=',')
+    Qobs["Date (TU)"] = Qobs["Date (TU)"].str.split('T').str[0]
+    Qobs["Date (TU)"] = pd.to_datetime(Qobs["Date (TU)"], format='%Y-%m-%d')
+    Qobs.set_index("Date (TU)", inplace=True)
 
-    #TODO noms du csv
-    #csv_name = 'hydrometry catchment Nancon.csv'
-    csv_name = hydrometry_csv
-    Qobs = pd.read_csv(data_path+'/'+csv_name, sep=';', index_col=0, parse_dates=True)
+    Qobs = Qobs.drop(columns=["Statut", "Qualification", "Méthode", "Continuité"])
     Qobs = Qobs.squeeze()
     Qobs = Qobs.rename('Q')
-    def select_period(df, first, last):
-        df = df[(df.index.year>=first) & (df.index.year<=last)]
-        return df
     area = BV.geographic.area
 
-    #first = 1990
-    #last = 2021 #TODO VARIABLES
     first = year_start
     last = year_end
 

@@ -1,5 +1,6 @@
   
 import pandas as pd
+import os
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from typing import Optional
@@ -17,10 +18,11 @@ class Outputs :
     dates : periode de prediction / estimation des debits
     """
 
-    def __init__(self, id: str, name: str, date:pd.Series, Q_pred:pd.Series, Q_obs:Optional[pd.Series] = None, crit: Optional[float] = None) :
+    def __init__(self, id: str, name: str, figures_dir:str, date:pd.Series, Q_pred:pd.Series, Q_obs:Optional[pd.Series] = None, crit: Optional[float] = None) :
 
         self.watershed_id = id
         self.name = name
+        self.figures_dir = figures_dir
         self.Q_pred = Q_pred
         self._Q_obs: Optional[pd.Series] = Q_obs
         self._crit: Optional[float] = crit
@@ -82,29 +84,56 @@ class Outputs :
             )
         except Exception as e:
             raise ValueError(f"Erreur de conversion des dates : {e}")
+        
+    def detect_frequency(self, idx: pd.DatetimeIndex) -> str:
+        """
+        Détecte la fréquence à partir d’un DatetimeIndex.
+        Retourne 'daily' si c’est quotidien,
+        'monthly' si c'est mensuel,
+        sinon 'unknown'.
+        """
+        
+        freq = pd.infer_freq(idx)
+        if freq == 'D':
+            return 'daily'
+        elif freq in ('M', 'MS', 'BM', 'BMS'):  # M=fin de mois, MS=début de mois…
+            return 'monthly'
+        else:
+            return freq or 'unknown'
     
     def affiche(self) -> None:
         """
         Affiche un graphique permettant de comparer les debits observes et estimes sur la periode definie dans dates ainsi que d'afficher la valeur du critere pour l'estimation
         """
 
-        plt.figure(figsize=(12, 6))
+        freq = self.detect_frequency(self.dates)
+        if freq == "daily" :
+            label = "(mm/j)"
+        elif freq == "monthly" :
+            label = "(mm/month)"
+        else :
+            label = ""
+
+
+        fig = plt.figure(figsize=(12, 6))
         ax = plt.gca()
         
         if self.has_Q_obs():
-            ax.plot(self.dates, self.Q_obs, 'k-', linewidth=1.5, label='Q mesuré (mm/j)')
-        ax.plot(self.dates, self.Q_pred, 'r-', linewidth=1.5, label='Q simulé (mm/j)')
+            ax.plot(self.dates, self.Q_obs, 'k-', linewidth=1.5, label=f"Q mesuré {label}")
+        ax.plot(self.dates, self.Q_pred, 'r-', linewidth=1.5, label=f"Q simulé {label}")
 
         locator = mdates.AutoDateLocator(minticks=6, maxticks=15)
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
         
-        if self.has_crit():
-            ax.set_title(f"Débits - {self.name} {self.watershed_id} | crit = {self.crit}", fontsize=14)
-        else:
-            ax.set_title(f"Débits - {self.name} {self.watershed_id}", fontsize=14)
-        ax.set_xlabel('Temps')
-        ax.set_ylabel('Débit (mm/j)')
+        if self.has_Q_obs() :
+            ax.set_title(f"Prévision et comparaison des débits mesurés et simulés sur le bassin versant {self.name} - {self.watershed_id}", fontsize=14)
+            plot_name = f"Prévisions_{self.name}_Q_obs_Q_sim.png"
+        else :
+            ax.set_title(f"Prévision des débits sur le bassin versant {self.name} - {self.watershed_id}", fontsize=14)
+            plot_name = f"Prévisions_{self.name}.png"
+        ax.set_xlabel("Dates")
+        ax.set_ylabel(f"Débit {label}")
         ax.grid(True, linestyle='--', alpha=0.7)
         ax.legend()
 
@@ -112,6 +141,11 @@ class Outputs :
         
         plt.tight_layout()
         plt.show()
+
+        fig_path = os.path.join(self.figures_dir, plot_name)
+        fig.savefig(fig_path, bbox_inches='tight')
+
+        plt.close(fig)
 
     def affiche_avec_filename(self, filename) -> None:
         """
@@ -157,10 +191,9 @@ class Outputs :
         ax.plot(self.dates, self.Q_pred, color='red', lw=1, label='modeled')
 
         # ax.plot(Rmod.index, Rmod*1000, color='blue', lw=2.5)
-        ax.set_xlabel('Date')
+        ax.set_xlabel('Dates')
         ax.set_ylabel('Q / A [mm/month]')
         ax.set_yscale('log')
-
 
         ax = a1
         ax.scatter(self.Q_obs, self.Q_pred,
@@ -172,6 +205,12 @@ class Outputs :
         ax.set_ylim(0.0001,100)  
         ax.set_xlabel('$Q_{obs}$ / A [mm/month]', fontsize=12)
         ax.set_ylabel('$Q_{sim}$ / A [mm/month]', fontsize=12)
+        fig.suptitle(f"Prévision et comparaison des débits mesurés et simulés sur le bassin versant {self.name} - {self.watershed_id}", fontsize=14)
         fig.tight_layout()
 
         plt.show()
+
+        fig_path = os.path.join(self.figures_dir, f"Prévisions_comparaisons_{self.name}_Q_obs_Q_sim.png")
+        fig.savefig(fig_path, bbox_inches='tight')
+
+        plt.close(fig)

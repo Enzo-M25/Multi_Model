@@ -152,9 +152,11 @@ class RL(Model) :
                         if test == "" :
                             crit = CritereRL(Q,Q_sim)
                         elif test == "log" :
-                            crit = CritereRL(np.log(Q),np.log(Q_sim))
+                            Q_bar = np.mean(Q)
+                            eps = Q_bar/100
+                            crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
                         elif test == "inv" :
-                            crit = CritereRL(1/Q,1/Q_sim)
+                            crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
                         else :
                             raise ValueError(f"Transformation inconnue : {test}")
 
@@ -255,9 +257,11 @@ class RL(Model) :
                 if test == "" :
                     crit = CritereRL(Q,Q_sim)
                 elif test == "log" :
-                    crit = CritereRL(np.log(Q),np.log(Q_sim))
+                    Q_bar = np.mean(Q)
+                    eps = Q_bar/100
+                    crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
                 elif test == "inv" :
-                    crit = CritereRL(1/Q,1/Q_sim)
+                    crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
                 else :
                     raise ValueError(f"Transformation inconnue : {test}")
 

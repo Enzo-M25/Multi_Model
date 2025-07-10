@@ -24,7 +24,7 @@ def main():
     nom = "Test"
     dossier = "C:\\Users\\enzma\\Documents\\rennes 1\\M2\\Semestre 2\\Stage\\codes_matlab_resev_lin\\stations"
     fichier = "CAMELS_FR_tsd_J260301001.csv"
-    bv = Jauge(id, nom, dossier, fichier)
+    bv = Jauge(id, nom, dossier, fichier, None)
 
     fct_calib = "crit_KGE_opti"
 

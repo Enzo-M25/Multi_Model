@@ -110,8 +110,8 @@ class HydroModPy(Model):
         # Construction de la liste d'arguments str
         str_args = [
             bv.watershed.basin_name,
-            # str(bv.watershed.year_start),
-            # str(bv.watershed.year_end),
+            #str(bv.watershed.year_start),
+            #str(bv.watershed.year_end),
             str(self.t_calib_start.year),
             str(self.t_calib_end.year),
             self.freq_input,

@@ -117,8 +117,10 @@ def crit_nselog(simulations, evaluation):
     
     """
 
-    simulations = 0.01 * simulations
-    evaluation = 0.01 * evaluation
+    epsilon = np.mean(evaluation)/100
+
+    simulations = epsilon + simulations
+    evaluation = epsilon + evaluation
 
     nselog = 1 - (
             np.sum((np.log(evaluation) - np.log(simulations)) ** 2, axis=0, dtype=np.float64)
@@ -126,50 +128,6 @@ def crit_nselog(simulations, evaluation):
     )
 
     return nselog
-
-def crit_nselog2(simulations, observations): #TODO
-    """
-    Calcule le Nash–Sutcliffe Efficiency (sur les logarithmes) entre 
-    les séries de simulations et d'observations.
-
-    NSE_log = 1 −
-      ∑[log(obs) − log(sim)]²
-      ———————————————
-      ∑[log(obs) − mean(log(obs))]²
-
-    Parameters
-    ----------
-    simulations : array-like
-        Valeurs simulées (doivent être strictement positives).
-    observations : array-like
-        Valeurs observées (doivent être strictement positives).
-
-    Returns
-    -------
-    float
-        Le critère NSE sur log : 1 si simulation parfaite, 
-        négatif si pire que la moyenne.
-    """
-    sim = np.asarray(simulations, dtype=float)
-    obs = np.asarray(observations, dtype=float)
-
-    # On ne peut pas prendre log(0) ni log de valeurs négatives
-    mask = (sim > 0) & (obs > 0)
-    if not np.any(mask):
-        raise ValueError("Aucune paire (sim, obs) positive pour calculer le log‐NSE")
-
-    log_sim = np.log(sim[mask])
-    log_obs = np.log(obs[mask])
-
-    # Numérateur et dénominateur
-    numer = np.sum((log_obs - log_sim) ** 2, axis=0)
-    denom = np.sum((log_obs - np.mean(log_obs)) ** 2)
-
-    # Évite la division par zéro
-    if denom == 0:
-        raise ValueError("Variance nulle de log(observations) : impossible de normaliser")
-
-    return 1 - numer / denom
 
 def evalution_criteria(calib) :
     """

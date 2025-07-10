@@ -44,7 +44,7 @@ class Choix :
         
         # Configuration pour chaque critère (à adapter selon vos besoins)
         criteria_config = {
-            'crit_NSE': {'objective': 'maximize', 'threshold': 0.3},
+            'crit_NSE': {'objective': 'maximize', 'threshold': 0.1},
             'crit_NSE_log': {'objective': 'maximize', 'threshold': 0.1},
             'crit_KGE': {'objective': 'maximize', 'threshold': 0.1},
             'crit_RMSE': {'objective': 'minimize', 'threshold': 0.5}, #TODO 
