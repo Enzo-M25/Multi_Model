@@ -111,12 +111,6 @@ class GR4J(Model) :
 
         if self.has_dict_crit() and self.fct_calib == "crit_mix":
 
-            if len(self.transfo) != len(self.dict_crit):
-                raise ValueError(
-                    f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
-                    f"et le nombre de critères ({len(self.dict_crit)})."
-                )
-
             self.validate_weights()
 
             weights = FloatVector(list(self.dict_crit.values()))

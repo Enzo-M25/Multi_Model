@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 
-from CritereRL import CritereRL
+from Critereprev import Critereprev
 from Jauge import Jauge
 from Model_folder.RL import RL
 from Model_folder.GR4J import GR4J
@@ -28,13 +28,13 @@ def critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit) -> flo
             elem = transfo[i]
             if elem == "":
                 elem = None
-                critere = CritereRL(Q_obs,Q_sim)
+                critere = Critereprev(Q_obs,Q_sim)
             elif elem == "log":
                 Q_bar = np.mean(Q_obs)
                 eps = 0 if model.name == "GR4J" else Q_bar / 100
-                critere = CritereRL(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
+                critere = Critereprev(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
             elif elem == "inv" :
-                critere = CritereRL(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
+                critere = Critereprev(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
             methode = getattr(critere, crit_fct)
             valeur = methode()
             crit += dict_crit.values()[i] * valeur
@@ -44,13 +44,13 @@ def critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit) -> flo
         elem = transfo[0]
         if elem == "":
             elem = None
-            critere = CritereRL(Q_obs,Q_sim)
+            critere = Critereprev(Q_obs,Q_sim)
         elif elem == "log":
             Q_bar = np.mean(Q_obs)
             eps = 0*Q_bar/100
-            critere = CritereRL(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
+            critere = Critereprev(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
         elif elem == "inv" :
-            critere = CritereRL(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
+            critere = Critereprev(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
         methode = getattr(critere, fct_calib)
         crit = methode()
     
@@ -74,13 +74,21 @@ def parse_date(d:str) -> datetime :
 
 def main():
 
-    # J001401001
+    # J001401001 Nancon
     # 389358
     # 6816630
 
-    # J721401001
+    # J721401001 Flume
     # 344966
     # 6797471
+
+    # J708311001 Veuvre
+    # 365833
+    # 6796501
+
+    # J014401001 Loisance
+    # 372020
+    # 6823398
     
     id = "J"
     nom = "Nancon"
@@ -93,10 +101,10 @@ def main():
         data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
         results_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
         basin_name=nom,
-        x=389358,
-        y=6816630,
+        x=389358, #########
+        y=6816630, #########
         dem_raster=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\regional dem.tif",
-        hydrometry_csv=r"J001401001_QmnJ(n=1_non-glissant).csv", # Nancon et x y
+        hydrometry_csv=r"J001401001_QmnJ(n=1_non-glissant).csv", ########""
         year_start=2000,
         year_end=2020,
         example_year=2010
@@ -106,16 +114,16 @@ def main():
 
     #watershed.pre_processing()
 
-    fct_calib = "crit_KGE"
+    fct_calib = "crit_NSE"
 
     transfo = ["log"]
     dict_crit = {"crit_KGE": 0.5, "crit_NSE": 0.5}
 
-    t_calib_start = parse_date("2010-01-01")
+    t_calib_start = parse_date("2005-01-01")
     t_calib_end = parse_date("2010-12-31")
-    t_valid_start = parse_date("2020-01-01")
+    t_valid_start = parse_date("2010-01-01")
     t_valid_end = parse_date("2020-12-31")
-    t_prev_start = parse_date("2021-06-01")
+    t_prev_start = parse_date("2021-01-01") # pour hydromodpy l'année doit être complète pour les comparaisons
     t_prev_end = parse_date("2021-12-31")
 
     if t_calib_start > t_calib_end or t_valid_start > t_valid_end or t_prev_start > t_prev_end :
@@ -123,16 +131,16 @@ def main():
 
     mac = Choix()
     
-    # model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-    # model1.param_calib(bv)
-    # print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"  Alpha      : {model1.alpha}")
-    # print(f"  Vmax       : {model1.Vmax}")
-    # print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
-    # print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
-    # print("===============================\n")
-    # mac.add_model(model1)
+    model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+    model1.param_calib(bv)
+    print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"  Alpha      : {model1.alpha}")
+    print(f"  Vmax       : {model1.Vmax}")
+    print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
+    print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
+    print("===============================\n")
+    mac.add_model(model1)
     
     # model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
     # model2.param_calib(bv)
@@ -147,18 +155,18 @@ def main():
     # mac.add_model(model2)
     
     
-    model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-                        'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
-    model3.param_calib(bv)
-    print("\n=== Résultats du modèle HydroModPy ===")
-    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
-    print("Paramètres calibrés :")
-    print(f"  Sy      : {model3.sy}")
-    print(f"  hk(m/s) : {model3.hk}")
-    print("===============================\n")
-    mac.add_model(model3)
+    # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
+    #                     'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+    # model3.param_calib(bv)
+    # print("\n=== Résultats du modèle HydroModPy ===")
+    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    # print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
+    # print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
+    # print("Paramètres calibrés :")
+    # print(f"  Sy      : {model3.sy}")
+    # print(f"  hk(m/s) : {model3.hk}")
+    # print("===============================\n")
+    # mac.add_model(model3)
     
     try :
         best = mac.comparaison_models(fct_calib) # best est une liste de model
@@ -196,3 +204,6 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+
+    # TODO Specific discharge

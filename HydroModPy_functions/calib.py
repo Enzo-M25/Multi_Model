@@ -452,13 +452,16 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     simulations_folder = os.path.join(out_path, watershed_name, 'results_simulations')
     calibration_folder = os.path.join(out_path, watershed_name, 'results_calibration')
 
+    BV.add_hydrography(data_path, types_obs=['regional stream network'])
+    BV.add_hydrometry(data_path,'france hydrometric stations.shp')
     # Recharge et ruisselement de surface direct
 
     BV.add_climatic()
 
     # Reanalyse
-    BV.climatic.update_sim2_reanalysis(var_list=['recharge', 'runoff', 'precip',
-                                                'evt', 'etp', 't', 'eff_rain'
+    BV.climatic.update_sim2_reanalysis(var_list=[ 'recharge', 'runoff',
+                                                  'precip',
+                                                  'evt', 'etp', 't', 
                                                 ],
                                         nc_data_path=os.path.join(
                                             data_path,

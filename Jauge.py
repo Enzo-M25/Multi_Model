@@ -7,7 +7,7 @@ from Pre_process import Pre_Process
 
 # TODO API
 class Jauge :
-    """
+    """ 
     Donnees pour un bassin versant jauge
     Fonctionne pour l'instant en recuperant les donnees en format csv
 

@@ -63,6 +63,12 @@ class Model :
         Parametre de sortie :
         booleen indiquant si dict_crit contient des criteres impossibles à melanger
         """
+
+        if len(self.transfo) != len(self.dict_crit):
+            raise ValueError(
+            f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
+            f"et le nombre de critères ({len(self.dict_crit)})."
+            )
         
         forbidden = [
             ("crit_NSE",     "crit_RMSE"),

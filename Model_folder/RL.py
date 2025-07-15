@@ -64,19 +64,11 @@ class RL(Model) :
         self.crit_valid = self.validation(bv)
 
     def calibration(self, bv:Jauge) -> tuple[float,float,float] :
-        """
-        Calibre le modele de reservoir lineaire sur le bassin versant bv et recupere les parametres de calibration ainsi que le NSE obtenus lors de celle-ci
-        
-        Paramètre d’entrée :
-        bv : Bassin versant jauge sur lequel on effectue la calibration
 
-        Paramètres de sortie :
-        crit_val : la meilleure valeur du critere de calibration obtenue
-        a : valeur du parametre alpha pour bv apres calibration
-        vmax : valeur du parametre Vmax pour bv apres calibration
-        """
+        print("début calibration RL opti")
 
-        print("début calibration RL")
+        alpha_0 = 0.0001
+        Vmax_0 = 1
 
         # Extraction des donnees
 
@@ -97,89 +89,22 @@ class RL(Model) :
         P = P[~mask]
         E = E[~mask]
 
-        R = P-E
-
-        # Paramètres
-        list_alpha = np.arange(0.0001, 0.5001, 0.0005)
-        #list_alpha = np.arange(0.0001, 0.5001, 0.01)
-        list_Vmax  = np.arange(1, 550, 1)       
+        R = P-E 
 
         delta_t = 1.0
-        N = len(Q)
 
-        # Pré‑allocation des résultats
-        crit_mat   = np.zeros((len(list_alpha), len(list_Vmax)))
+        c = CritereRL(Q, R, delta_t)
+        if not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
+            alpha_opt, Vmax_opt = c.optimize_criterion(alpha_0, Vmax_0, self.fct_calib, None, self.transfo)
+            crit_opt, type_err = c.calculate_criteria(alpha_opt, Vmax_opt, self.fct_calib, None, self.transfo)
+        else :
+            self.validate_weights()
+            alpha_opt, Vmax_opt = c.optimize_criterion(alpha_0, Vmax_0, self.fct_calib, self.dict_crit, self.transfo)
+            crit_opt, type_err = c.calculate_criteria(alpha_opt, Vmax_opt, self.fct_calib, self.dict_crit, self.transfo)
 
-        # Boucles principales
-        for i, alpha in enumerate(list_alpha):
-            exp_alpha = np.exp(-alpha * delta_t)
-            coeff_R   = (1 - exp_alpha) / alpha
+        print("calibration RL opti finie")
 
-            for j, Vm in enumerate(list_Vmax):
-                V0 = Vm / 2.0
-
-                # initialisation du vecteur V
-                V = np.zeros(N)
-                V[0] = V0
-
-                # résolution
-                for n in range(N - 1):
-                    V_pred = exp_alpha * V[n] + coeff_R * R[n]
-                    # on contraint V entre 0 et Vm
-                    V[n+1] = min(max(V_pred, 0.0000001), Vm)
-
-                # calcul du critere
-                Q_sim   = alpha * V
-
-                if self.has_dict_crit() and self.fct_calib == "crit_mix":
-
-                    if len(self.transfo) != len(self.dict_crit):
-                        raise ValueError(
-                            f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
-                            f"et le nombre de critères ({len(self.dict_crit)})."
-                        )
-                    self.validate_weights()
-
-                    crit = CritereRL(Q,Q_sim)
-                    tf = dict(zip(list(self.dict_crit.keys()), self.transfo))
-                    crit_mat[i, j]  = crit.crit_mix(self.dict_crit, tf)
-
-                elif not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
-                    try:
-                        if len(self.transfo) != 1 :
-                            raise ValueError("Transformation de longueur inadaptée")
-                        test = self.transfo[0]
-                        if test == "" :
-                            crit = CritereRL(Q,Q_sim)
-                        elif test == "log" :
-                            Q_bar = np.mean(Q)
-                            eps = Q_bar/100
-                            crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
-                        elif test == "inv" :
-                            crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
-                        else :
-                            raise ValueError(f"Transformation inconnue : {test}")
-
-                        methode = getattr(crit, self.fct_calib)
-                        crit_mat[i, j]  = methode()
-                    except AttributeError:
-                        raise ValueError(f"La fonction '{self.fct_calib}' n'existe pas dans Critere.")
-                    
-                else :
-                    raise ValueError(f"Vous n'avez pas donne de critere ou les informations que vous avez rentrees sont incoherentes")
-
-        # indices du tableau 
-        ind_flat = crit_mat.argmax()
-        ligne, col = np.unravel_index(ind_flat, crit_mat.shape)
-
-        # conservation des meilleures valeurs
-        crit_val = crit_mat[ligne, col]
-        a = list_alpha[ligne]
-        vmax = list_Vmax[col]
-
-        print("calibration RL finie")
-
-        return crit_val, a, vmax
+        return crit_opt, alpha_opt, Vmax_opt
 
     def validation(self, bv:Jauge) -> float :
         """
@@ -209,69 +134,20 @@ class RL(Model) :
         mask = np.isnan(Q) | np.isnan(P) | np.isnan(E)
 
         d = d[~mask]
-        Q    = Q[~mask]
-        P    = P[~mask]
-        E    = E[~mask]
+        Q = Q[~mask]
+        P = P[~mask]
+        E = E[~mask]
 
-        R = P-E
+        R = P-E 
 
-        # Résolution avec les parametres de calibration
-
-        v0 = self.Vmax/2
         delta_t = 1.0
-        N = len(Q)
 
-        exp_alpha = np.exp(-self.alpha * delta_t)
-        coeff_R   = (1 - exp_alpha) / self.alpha
-
-        V = np.zeros(N)
-        V[0] = v0
-
-        for n in range(N - 1):
-            V_pred = exp_alpha * V[n] + coeff_R * R[n]
-            V[n+1] = min(max(V_pred, 0.0000001), self.Vmax)
-
-        # calcul du critere
-        Q_sim   = self.alpha * V
-
-        if self.has_dict_crit() and self.fct_calib == "crit_mix":
-
-            if len(self.transfo) != len(self.dict_crit):
-                raise ValueError(
-                    f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
-                    f"et le nombre de critères ({len(self.dict_crit)})."
-                )
-            
-            self.validate_weights()
-
-            crit = CritereRL(Q,Q_sim)
-            tf = dict(zip(list(self.dict_crit.keys()), self.transfo))
-            crit_val  = crit.crit_mix(self.dict_crit, tf)
-
-        elif not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
-                    
-            try:
-                if len(self.transfo) != 1 :
-                    raise ValueError("Transformation de longueur inadaptée")
-                test = self.transfo[0]
-                if test == "" :
-                    crit = CritereRL(Q,Q_sim)
-                elif test == "log" :
-                    Q_bar = np.mean(Q)
-                    eps = Q_bar/100
-                    crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
-                elif test == "inv" :
-                    crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
-                else :
-                    raise ValueError(f"Transformation inconnue : {test}")
-
-                methode = getattr(crit, self.fct_calib)
-                crit_val  = methode()
-            except AttributeError:
-                raise ValueError(f"La fonction '{self.fct_calib}' n'existe pas dans Critere.")
-            
+        c = CritereRL(Q, R, delta_t)
+        if not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
+            crit_val, type_err = c.calculate_criteria(self.alpha, self.Vmax, self.fct_calib, None, self.transfo)
         else :
-            raise ValueError(f"Vous n'avez pas donne de critere ou les informations que vous avez rentrees sont incoherentes")
+            self.validate_weights()
+            crit_val, type_err = c.calculate_criteria(self.alpha, self.Vmax, self.fct_calib, self.dict_crit, self.transfo)
 
         print("validation RL finie")
 
@@ -326,12 +202,11 @@ class RL(Model) :
             V_pred = exp_alpha * V[n] + coeff_R * R[n]
             V[n+1] = min(max(V_pred, 0), self.Vmax)
 
-        Q_sim   = self.alpha * V
+        Q_sim = self.alpha * V
 
         print("estimation RL finie")
 
         return d, Q_sim
-    
 
 
 
@@ -340,77 +215,226 @@ class RL(Model) :
 
 
 
-    def calibration_opti(self, bv:Jauge) -> tuple[float,float,float] :
 
-        print("début calibration RL opti")
 
-        alpha_opt = 0
-        Vmax_opt = 0
-        NSE_opt = 0
 
-        # Extraction des donnees
 
-        bv.donnees["DatesR"] = pd.to_datetime(bv.donnees["tsd_date"].astype(str), format="%Y%m%d")
 
-        lignes = self.idx_range(bv.donnees, self.t_calib_start, self.t_calib_end)
-        colonnes = ["DatesR", "tsd_q_mm", "tsd_prec", "tsd_pet_ou"]
-        extrait = bv.donnees.loc[lignes, colonnes]
-        d = extrait.iloc[:, 0].to_numpy()
-        Q = extrait.iloc[:, 1].to_numpy()
-        P = extrait.iloc[:, 2].to_numpy()
-        E = extrait.iloc[:, 3].to_numpy()
 
-        mask = np.isnan(Q) | np.isnan(P) | np.isnan(E)
 
-        d = d[~mask]
-        Q = Q[~mask]
-        P = P[~mask]
-        E = E[~mask]
 
-        R = P-E 
 
-        delta_t = 1.0
-        N = len(d)
+    # def calibration_old(self, bv:Jauge) -> tuple[float,float,float] :
+    #     """
+    #     Calibre le modele de reservoir lineaire sur le bassin versant bv et recupere les parametres de calibration ainsi que le NSE obtenus lors de celle-ci
+        
+    #     Paramètre d’entrée :
+    #     bv : Bassin versant jauge sur lequel on effectue la calibration
 
-        if self.has_dict_crit() and self.fct_calib == "crit_mix":
+    #     Paramètres de sortie :
+    #     crit_val : la meilleure valeur du critere de calibration obtenue
+    #     a : valeur du parametre alpha pour bv apres calibration
+    #     vmax : valeur du parametre Vmax pour bv apres calibration
+    #     """
 
-            if len(self.transfo) != len(self.dict_crit):
-                raise ValueError(
-                    f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
-                    f"et le nombre de critères ({len(self.dict_crit)})."
-                )
-            self.validate_weights()
+    #     print("début calibration RL")
 
-            crit = CritereRL(Q,Q_sim)
-            tf = dict(zip(list(self.dict_crit.keys()), self.transfo))
-            crit_mat[i, j]  = crit.crit_mix(self.dict_crit, tf)
+    #     # Extraction des donnees
 
-        elif not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
-            try:
-                if len(self.transfo) != 1 :
-                    raise ValueError("Transformation de longueur inadaptée")
-                test = self.transfo[0]
-                if test == "" :
-                    crit = CritereRL(Q,Q*0)
-                elif test == "log" :
-                    crit = CritereRL(np.log(Q),Q*0)
-                elif test == "inv" :
-                    crit = CritereRL(1/Q,Q*0)
-                else :
-                    raise ValueError(f"Transformation inconnue : {test}")
+    #     bv.donnees["DatesR"] = pd.to_datetime(bv.donnees["tsd_date"].astype(str), format="%Y%m%d")
 
-                methode = getattr(crit, self.fct_calib)
-                alpha_opt, Vmax_opt, NSE_opt  = methode(R,Q,delta_t)
-            except AttributeError:
-                raise ValueError(f"La fonction '{self.fct_calib}' n'existe pas dans Critere.")
+    #     lignes = self.idx_range(bv.donnees, self.t_calib_start, self.t_calib_end)
+    #     colonnes = ["DatesR", "tsd_q_mm", "tsd_prec", "tsd_pet_ou"]
+    #     extrait = bv.donnees.loc[lignes, colonnes]
+    #     d = extrait.iloc[:, 0].to_numpy()
+    #     Q = extrait.iloc[:, 1].to_numpy()
+    #     P = extrait.iloc[:, 2].to_numpy()
+    #     E = extrait.iloc[:, 3].to_numpy()
+
+    #     mask = np.isnan(Q) | np.isnan(P) | np.isnan(E)
+
+    #     d = d[~mask]
+    #     Q = Q[~mask]
+    #     P = P[~mask]
+    #     E = E[~mask]
+
+    #     R = P-E
+
+    #     # Paramètres
+    #     list_alpha = np.arange(0.0001, 0.5001, 0.005)
+    #     #list_alpha = np.arange(0.0001, 0.5001, 0.01)
+    #     list_Vmax  = np.arange(1, 550, 1)       
+
+    #     delta_t = 1.0
+    #     N = len(Q)
+
+    #     # Pré‑allocation des résultats
+    #     crit_mat   = np.zeros((len(list_alpha), len(list_Vmax)))
+
+    #     # Boucles principales
+    #     for i, alpha in enumerate(list_alpha):
+    #         exp_alpha = np.exp(-alpha * delta_t)
+    #         coeff_R   = (1 - exp_alpha) / alpha
+
+    #         for j, Vm in enumerate(list_Vmax):
+    #             V0 = Vm / 2.0
+
+    #             # initialisation du vecteur V
+    #             V = np.zeros(N)
+    #             V[0] = V0
+
+    #             # résolution
+    #             for n in range(N - 1):
+    #                 V_pred = exp_alpha * V[n] + coeff_R * R[n]
+    #                 # on contraint V entre 0 et Vm
+    #                 V[n+1] = min(max(V_pred, 0.0000001), Vm)
+
+    #             # calcul du critere
+    #             Q_sim   = alpha * V
+
+    #             if self.has_dict_crit() and self.fct_calib == "crit_mix":
+
+    #                 if len(self.transfo) != len(self.dict_crit):
+    #                     raise ValueError(
+    #                         f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
+    #                         f"et le nombre de critères ({len(self.dict_crit)})."
+    #                     )
+    #                 self.validate_weights()
+
+    #                 crit = CritereRL(Q,Q_sim)
+    #                 tf = dict(zip(list(self.dict_crit.keys()), self.transfo))
+    #                 crit_mat[i, j]  = crit.crit_mix(self.dict_crit, tf)
+
+    #             elif not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
+    #                 try:
+    #                     if len(self.transfo) != 1 :
+    #                         raise ValueError("Transformation de longueur inadaptée")
+    #                     test = self.transfo[0]
+    #                     if test == "" :
+    #                         crit = CritereRL(Q,Q_sim)
+    #                     elif test == "log" :
+    #                         Q_bar = np.mean(Q)
+    #                         eps = Q_bar/100
+    #                         crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
+    #                     elif test == "inv" :
+    #                         crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
+    #                     else :
+    #                         raise ValueError(f"Transformation inconnue : {test}")
+
+    #                     methode = getattr(crit, self.fct_calib)
+    #                     crit_mat[i, j]  = methode()
+    #                 except AttributeError:
+    #                     raise ValueError(f"La fonction '{self.fct_calib}' n'existe pas dans Critere.")
                     
-        else :
-            raise ValueError(f"Vous n'avez pas donne de critere ou les informations que vous avez rentrees sont incoherentes")
+    #             else :
+    #                 raise ValueError(f"Vous n'avez pas donne de critere ou les informations que vous avez rentrees sont incoherentes")
 
-        print("calibration RL opti finie")
+    #     # indices du tableau 
+    #     ind_flat = crit_mat.argmax()
+    #     ligne, col = np.unravel_index(ind_flat, crit_mat.shape)
 
-        return NSE_opt, alpha_opt, Vmax_opt
-    
-    def param_calib_opti(self, bv:Jauge) -> None :
+    #     # conservation des meilleures valeurs
+    #     crit_val = crit_mat[ligne, col]
+    #     a = list_alpha[ligne]
+    #     vmax = list_Vmax[col]
 
-        self.crit_calib, self.alpha, self.Vmax = self.calibration_opti(bv)
+    #     print("calibration RL finie")
+
+    #     return crit_val, a, vmax
+
+
+    # def validation_old(self, bv:Jauge) -> float :
+    #     """
+    #     Effectue une validation des débits sur le bassin versant bv pour une certaine temporalité (t_valid)
+        
+    #     Paramètre d’entrée :
+    #     bv : Bassin versant jauge sur lequel on effectue l'estimation
+
+    #     Paramètre de sortie :
+    #     crit_val : la valeur du critere obtenue apres la validation
+    #     """
+
+    #     print("début validation RL")
+
+    #     # Extraction des donnees
+
+    #     bv.donnees["DatesR"] = pd.to_datetime(bv.donnees["tsd_date"].astype(str), format="%Y%m%d")
+
+    #     lignes = self.idx_range(bv.donnees, self.t_valid_start, self.t_valid_end)
+    #     colonnes = ["DatesR", "tsd_q_mm", "tsd_prec", "tsd_pet_ou"]
+    #     extrait = bv.donnees.loc[lignes, colonnes]
+    #     d = extrait.iloc[:, 0].to_numpy()
+    #     Q = extrait.iloc[:, 1].to_numpy()
+    #     P = extrait.iloc[:, 2].to_numpy()
+    #     E = extrait.iloc[:, 3].to_numpy()
+
+    #     mask = np.isnan(Q) | np.isnan(P) | np.isnan(E)
+
+    #     d = d[~mask]
+    #     Q    = Q[~mask]
+    #     P    = P[~mask]
+    #     E    = E[~mask]
+
+    #     R = P-E
+
+    #     # Résolution avec les parametres de calibration
+
+    #     v0 = self.Vmax/2
+    #     delta_t = 1.0
+    #     N = len(Q)
+
+    #     exp_alpha = np.exp(-self.alpha * delta_t)
+    #     coeff_R   = (1 - exp_alpha) / self.alpha
+
+    #     V = np.zeros(N)
+    #     V[0] = v0
+
+    #     for n in range(N - 1):
+    #         V_pred = exp_alpha * V[n] + coeff_R * R[n]
+    #         V[n+1] = min(max(V_pred, 0.0000001), self.Vmax)
+
+    #     # calcul du critere
+    #     Q_sim   = self.alpha * V
+
+    #     if self.has_dict_crit() and self.fct_calib == "crit_mix":
+
+    #         if len(self.transfo) != len(self.dict_crit):
+    #             raise ValueError(
+    #                 f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
+    #                 f"et le nombre de critères ({len(self.dict_crit)})."
+    #             )
+            
+    #         self.validate_weights()
+
+    #         crit = CritereRL(Q,Q_sim)
+    #         tf = dict(zip(list(self.dict_crit.keys()), self.transfo))
+    #         crit_val  = crit.crit_mix(self.dict_crit, tf)
+
+    #     elif not self.has_dict_crit() and not self.fct_calib == "crit_mix"  :
+                    
+    #         try:
+    #             if len(self.transfo) != 1 :
+    #                 raise ValueError("Transformation de longueur inadaptée")
+    #             test = self.transfo[0]
+    #             if test == "" :
+    #                 crit = CritereRL(Q,Q_sim)
+    #             elif test == "log" :
+    #                 Q_bar = np.mean(Q)
+    #                 eps = Q_bar/100
+    #                 crit = CritereRL(np.log(Q.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
+    #             elif test == "inv" :
+    #                 crit = CritereRL(1/(Q.astype(float)),1/(Q_sim.astype(float)))
+    #             else :
+    #                 raise ValueError(f"Transformation inconnue : {test}")
+
+    #             methode = getattr(crit, self.fct_calib)
+    #             crit_val  = methode()
+    #         except AttributeError:
+    #             raise ValueError(f"La fonction '{self.fct_calib}' n'existe pas dans Critere.")
+            
+    #     else :
+    #         raise ValueError(f"Vous n'avez pas donne de critere ou les informations que vous avez rentrees sont incoherentes")
+
+    #     print("validation RL finie")
+
+    #     return crit_val
