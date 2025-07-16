@@ -90,21 +90,21 @@ def main():
     # 372020
     # 6823398
     
-    id = "J"
-    nom = "Nancon"
+    id = "J721401001" #########
+    nom = "Flume_daily" ##########
     dossier = "C:\\Users\\enzma\\Documents\\rennes 1\\M2\\Semestre 2\\Stage\\codes_matlab_resev_lin\\stations"
-    fichier = "CAMELS_FR_tsd_J001401001.csv"
+    fichier = f"CAMELS_FR_tsd_{id}.csv"
 
     watershed = Pre_Process(
         #example_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo",
         example_path=r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
         data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
-        results_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
+        results_path= r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
         basin_name=nom,
-        x=389358, #########
-        y=6816630, #########
+        x=344966, #########
+        y=6797471, #########
         dem_raster=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\regional dem.tif",
-        hydrometry_csv=r"J001401001_QmnJ(n=1_non-glissant).csv", ########""
+        hydrometry_csv= f"{id}_QmnJ(n=1_non-glissant).csv",
         year_start=2000,
         year_end=2020,
         example_year=2010
@@ -116,7 +116,7 @@ def main():
 
     fct_calib = "crit_NSE"
 
-    transfo = ["log"]
+    transfo = [""]
     dict_crit = {"crit_KGE": 0.5, "crit_NSE": 0.5}
 
     t_calib_start = parse_date("2005-01-01")
@@ -131,16 +131,16 @@ def main():
 
     mac = Choix()
     
-    model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-    model1.param_calib(bv)
-    print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
-    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    print(f"  Alpha      : {model1.alpha}")
-    print(f"  Vmax       : {model1.Vmax}")
-    print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
-    print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
-    print("===============================\n")
-    mac.add_model(model1)
+    # model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+    # model1.param_calib(bv)
+    # print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
+    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    # print(f"  Alpha      : {model1.alpha}")
+    # print(f"  Vmax       : {model1.Vmax}")
+    # print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
+    # print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
+    # print("===============================\n")
+    # mac.add_model(model1)
     
     # model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
     # model2.param_calib(bv)
@@ -155,18 +155,18 @@ def main():
     # mac.add_model(model2)
     
     
-    # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-    #                     'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
-    # model3.param_calib(bv)
-    # print("\n=== Résultats du modèle HydroModPy ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    # print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
-    # print("Paramètres calibrés :")
-    # print(f"  Sy      : {model3.sy}")
-    # print(f"  hk(m/s) : {model3.hk}")
-    # print("===============================\n")
-    # mac.add_model(model3)
+    model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
+                        'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+    model3.param_calib(bv)
+    print("\n=== Résultats du modèle HydroModPy ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
+    print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
+    print("Paramètres calibrés :")
+    print(f"  Sy      : {model3.sy}")
+    print(f"  hk(m/s) : {model3.hk}")
+    print("===============================\n")
+    mac.add_model(model3)
     
     try :
         best = mac.comparaison_models(fct_calib) # best est une liste de model

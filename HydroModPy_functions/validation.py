@@ -257,15 +257,17 @@ def validation(nom_bv, first_year, last_year, freq_input, out_path, data_path, x
 
     # R AND r RESAMPLE BY YEAR AND NORMALIZATION
 
+    groundwater = R
+    surfacewater = r
     if freq_input == 'M':
-        R = R*R.index.day
-        r = r*r.index.day
+        groundwater = R*R.index.day
+        surfacewater = r*r.index.day
     if freq_input == 'W':
-        R = R*7 
-        r = r*7
-    Rannual = R.resample('Y').sum().mean()
-    rannual = r.resample('Y').sum().mean()
-    Qsafran = Rannual+rannual
+        groundwater = R*7 
+        surfacewater = r*7
+    groundwater_annual = groundwater.resample('Y').sum().mean()
+    surfacewater_annual = surfacewater.resample('Y').sum().mean()
+    Qsafran = groundwater_annual+surfacewater_annual
     F = Qobsyear / Qsafran
     print (f'F = {F}')
     R = R * F

@@ -49,7 +49,7 @@ import xarray as xr
 xr.set_options(keep_attrs = True)
 
 from os.path import dirname, abspath
-root_dir = r"C:\USERS\enzma\Documents\HydroModPy"
+root_dir = r"C:\\USERS\\enzma\\Documents\\HydroModPy"
 sys.path.append(root_dir)
 print("Root path directory is: {0}".format(root_dir.upper()))
 
@@ -405,6 +405,10 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     data_path = data_path
     discharge_path = os.path.join(data_path, discharge_file)
     specific_data_path = os.path.join(data_path, study_site)
+    print(data_path)
+    print(out_path)
+    print(discharge_path)
+    print(specific_data_path)
 
     print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
 
@@ -453,6 +457,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     calibration_folder = os.path.join(out_path, watershed_name, 'results_calibration')
 
     BV.add_hydrography(data_path, types_obs=['regional stream network'])
+    #BV.add_hydrography(data_path, types_obs=['CoursEau_FXX_clip_bre'], fields_obs=['fid'])
     BV.add_hydrometry(data_path,'france hydrometric stations.shp')
     # Recharge et ruisselement de surface direct
 
@@ -465,7 +470,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
                                                 ],
                                         nc_data_path=os.path.join(
                                             data_path,
-                                            r"Meteo\Historiques SIM2"),
+                                            f"Meteo\{watershed_name}\Historiques SIM2"),
                                         first_year=first_year,
                                         last_year=last_year,
                                         time_step=freq_input,
@@ -567,15 +572,17 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
     # Recharge and runoff resample by year and normalisation 
 
+    groundwater = R
+    surfacewater = r
     if freq_input == 'M':
-        R = R*R.index.day
-        r = r*r.index.day
+        groundwater = R*R.index.day
+        surfacewater = r*r.index.day
     if freq_input == 'W':
-        R = R*7 
-        r = r*7
-    Rannual = R.resample('Y').sum().mean()
-    rannual = r.resample('Y').sum().mean()
-    Qsafran = Rannual+rannual
+        groundwater = R*7 
+        surfacewater = r*7
+    groundwater_annual = groundwater.resample('Y').sum().mean()
+    surfacewater_annual = surfacewater.resample('Y').sum().mean()
+    Qsafran = groundwater_annual+surfacewater_annual
     F = Qobsyear / Qsafran
     print (f'F = {F}')
     R = R * F
