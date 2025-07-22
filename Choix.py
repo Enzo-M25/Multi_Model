@@ -10,13 +10,13 @@ class Choix :
     Choix du / des meilleurs modele(s) selon differents criteres
 
     Attributs
-    models : liste des modeles sur lesquels ont ete effectue une calibration
+    models (list[Model]) : liste des modeles sur lesquels ont ete effectue une calibration
     """
 
     def __init__(self):
         self.models = [] 
         
-    def add_model(self, model) -> None :
+    def add_model(self, model:Model) -> None :
         """
         Ajoute model a la liste de modeles a considerer
         
@@ -28,7 +28,6 @@ class Choix :
             self.models.append(model)
         else:
             raise TypeError("Seuls Model et ses sous-classes sont autorisés")
-    
     
     def comparaison_models(self, fct_calib:str, dict_crit:dict[str,float]=None) -> list[Model] :
         """
@@ -44,8 +43,8 @@ class Choix :
         
         # Configuration pour chaque critère (à adapter selon vos besoins)
         criteria_config = {
-            'crit_NSE': {'objective': 'maximize', 'threshold': 0.2},
-            'crit_NSE_log': {'objective': 'maximize', 'threshold': 0.2},
+            'crit_NSE': {'objective': 'maximize', 'threshold': 0.1},
+            'crit_NSE_log': {'objective': 'maximize', 'threshold': 0.1},
             'crit_KGE': {'objective': 'maximize', 'threshold': 0.1},
             'crit_RMSE': {'objective': 'minimize', 'threshold': 0.5}, #TODO 
             'crit_Biais': {'objective': 'zero', 'threshold': 5},

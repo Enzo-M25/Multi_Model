@@ -10,15 +10,15 @@ class Model :
     Classe mere des differents modeles consideres
 
     Attributs
-    t_calib : période de calibration du modele
-    t_valid : période de validation des débits
-    t_prev : période de prévision des débits
-    transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
-    fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
-    dict_crit : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
-    crit_calib : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
-    crit_valid : valeur du critere de validation obtenue lors de la validation de celui-ci
-    nom_model : nom du modele
+    t_calib (datetime) : période de calibration du modele
+    t_valid (datetime) : période de validation des débits
+    t_prev (datetime) : période de prévision des débits
+    transfo (list[str]) : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
+    fct_calib (str) : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    dict_crit ({str:float}) : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
+    crit_calib (float) : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
+    crit_valid (float) : valeur du critere de validation obtenue lors de la validation de celui-ci
+    nom_model (str) : nom du modele
     """
 
     def __init__(self, t_calib_start:str, t_calib_end:str, t_valid_start:str, t_valid_end:str, t_prev_start:str, t_prev_end:str,
@@ -61,7 +61,7 @@ class Model :
         2. Aucune combinaison interdite de critères n'apparaît dans dict_crit.
 
         Parametre de sortie :
-        booleen indiquant si dict_crit contient des criteres impossibles à melanger
+        booléen indiquant si dict_crit contient des critères impossibles à mélanger
         """
 
         if len(self.transfo) != len(self.dict_crit):
@@ -98,9 +98,9 @@ class Model :
 
         return True
 
-    @abstractmethod
-    def idx_range(self, df, start, end):
-        pass
+    # @abstractmethod
+    # def idx_range(self, df, start, end):
+    #     pass
 
     @abstractmethod
     def param_calib(self, bv:Jauge) -> None :
@@ -117,6 +117,3 @@ class Model :
     @abstractmethod
     def prevision(self, bv:Jauge) -> tuple[pd.Series, pd.Series] :
         pass
-
-    # @abstractmethod
-    # def estimation_pediction(self, bv:Jauge) -> tuple[float, pd.Series, pd.Series] :

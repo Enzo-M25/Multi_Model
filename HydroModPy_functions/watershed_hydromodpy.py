@@ -45,11 +45,40 @@ fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
 
 
 def select_period(df, first, last):
-        df = df[(df.index.year>=first) & (df.index.year<=last)]
-        return df
+    """
+    Sélectionne les lignes d’un DataFrame en temps compris entre deux bornes
 
-def pre_process_watershed(example_path: str, data_path: str, results_path: str, basin_name: str, x: float, y: float, dem_raster: str,
-                          hydrometry_csv: str, year_start: int, year_end: int, example_year: int) -> None:
+    Paramètres d'entrée :
+    df : pandas.DataFrame contenant toutes les dates
+    first : Année de début (incluse) de la période à extraire.
+    last : Année de fin (incluse) de la période à extraire.
+
+    Paramètre de sortie
+    df : Sous-ensemble du df d'origine contenant uniquement les lignes dont l’année de l’index est comprise entre first et last
+    """
+
+    df = df[(df.index.year>=first) & (df.index.year<=last)]
+    return df
+
+def pre_process_watershed(example_path: str, data_path: str, results_path: str, basin_name: str, departement:int, x: float, y: float,
+                          dem_raster: str, hydrometry_csv: str, year_start: int, year_end: int, example_year: int) -> None:
+    
+    """
+    Affiche plusieurs graphiques, cartes, etc donnant des informations sur le basin versant à l'aide des fonctions d'HydroModPy
+    (délimitations géographiques du bv, lithologie, réseau hydro, débits sur le bassin versant de year_start à year_end)
+
+    Paramètres d'entrée :
+    example_path (str) : chemin du dossier contenant les fonctions de HydroModPy
+    data_path (str) : chemin du dossier contenant les données  du bassin versant pour HydroModPy
+    results_path (str) : chemin du dossier où les résultats doivent être enregistrés
+    basin_name (str) : nom du bassin versant
+    x,y (float) : coordonnées de l'exutoire du bassin versant
+    dem_raster (str) : chemin du fichier raster du bassin versant
+    hydrometry_csv (str) : chemin du fichie csv contenant les données de débits observés
+    year_start,year_end (int) : années de début et de fin pour lesquelles les affichages seront calculés
+    example_year (int) : année comprise entre year_start et year_end pour laquelle on affiche explicitement les débits lors du preprocessing
+    """
+
 
     example_path = example_path
     data_path = data_path
@@ -58,8 +87,6 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
     print('The exemple directory is here :', example_path)
     print('The data comes from here :', data_path)
     print('The results of the example will be saved here :', out_path)
-
-
 
     # Name of the study site
     
@@ -91,7 +118,9 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
 
     # Clip specific data at the catchment scale
     BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
-    BV.add_hydrography(data_path, types_obs=['regional stream network'])
+
+    stream_network_path = os.path.join(data_path, 'regional_stream_network', f'{departement}')
+    BV.add_hydrography(stream_network_path, types_obs=['regional stream network'])
 
     # Add hydrological data
     BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
@@ -113,8 +142,6 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
 
     fig_dir = os.path.join(out_path, watershed_name, 'results_stable', '_figures')
     hydrometry_fig_dir = os.path.join(fig_dir, 'hydrometry')
-
-    #TODO
 
     Qobs = pd.read_csv(data_path+'/'+hydrometry_csv, sep=',')
     Qobs["Date (TU)"] = Qobs["Date (TU)"].str.split('T').str[0]
@@ -176,7 +203,6 @@ def pre_process_watershed(example_path: str, data_path: str, results_path: str, 
     ax.set_title(watershed_name + ' [' + str(first) + ' to ' + str(last) + ']')
     ax.grid(alpha=0.25, zorder=0)
 
-    #one = 2020 #TODO VARIABLE 
     one = example_year
 
     dates = np.array([one],dtype=np.int64)
@@ -236,6 +262,7 @@ if __name__ == "__main__":
     parser.add_argument("data_path")
     parser.add_argument("results_path")
     parser.add_argument("basin_name")
+    parser.add_argument("departement", type=int)
     parser.add_argument("x", type=float)
     parser.add_argument("y", type=float)
     parser.add_argument("dem_raster")
@@ -251,6 +278,7 @@ if __name__ == "__main__":
         data_path        = args.data_path,
         results_path     = args.results_path,
         basin_name       = args.basin_name,
+        departement      = args.departement,
         x                = args.x,
         y                = args.y,
         dem_raster       = args.dem_raster,

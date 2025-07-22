@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 from typing import Optional
+from datetime import datetime
 
 from .Model import Model
 from Jauge import Jauge
@@ -14,20 +15,20 @@ class RL(Model) :
     Modele de reservoir lineaire
 
     Attributs
-    t_calib : période de calibration du modèle
-    t_valid : période de validation des débits
-    t_prev : période de prévision des débits
-    transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
-    fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
-    dict_crit : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
-    crit_calib : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
-    crit_valid : valeur du critere de validation obtenue lors de la validation de celui-ci
-    nom_model : nom du modele (RL | Reservoir lineaire)
-    alpha : parametre du modele, coefficient de "vidange" du bassin versant
-    Vmax : parametre du modele, capacite de stockage de l'aquifere
+    t_calib (datetime) : période de calibration du modèle
+    t_valid (datetime) : période de validation des débits
+    t_prev (datetime) : période de prévision des débits
+    transfo (list[str]) : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
+    fct_calib (str) : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    dict_crit ({str,float}) : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
+    crit_calib (float) : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
+    crit_valid (float) : valeur du critere de validation obtenue lors de la validation de celui-ci
+    nom_model (str) : nom du modele (RL | Reservoir lineaire)
+    alpha (float) : parametre du modele, coefficient de "vidange" du bassin versant
+    Vmax (float) : parametre du modele, capacite de stockage de l'aquifere
     """
 
-    def __init__(self, t_calib_start:str, t_calib_end:str, t_valid_start:str, t_valid_end:str, t_prev_start:str, t_prev_end:str,
+    def __init__(self, t_calib_start:datetime, t_calib_end:datetime, t_valid_start:datetime, t_valid_end:datetime, t_prev_start:datetime, t_prev_end:datetime,
                  transfo:list[str], fct_calib:str, dict_crit: Optional[dict[str, float]] = None) :
         
         super().__init__(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, dict_crit)
@@ -35,7 +36,7 @@ class RL(Model) :
         self.alpha: float | None = None
         self.Vmax: float | None = None
 
-    def idx_range(self, df, start, end) -> list[int]:
+    def idx_range(self, df:pd.Series, start:datetime, end:datetime) -> list[int]:
         """
         Renvoie la liste des indices correspondant aux lignes de df["DatesR"] comprises entre deux dates données (incluses).
 
@@ -64,8 +65,18 @@ class RL(Model) :
         self.crit_valid = self.validation(bv)
 
     def calibration(self, bv:Jauge) -> tuple[float,float,float] :
+        """
+        Effectue la calibration des paramètres du modèle de réservoir linéaire sur une certaine temporalité (t_calib)
+        
+        Paramètre d’entrée :
+        bv : Bassin versant jauge sur lequel on effectue la calibration
 
-        print("début calibration RL opti")
+        Paramètres de sortie :
+        crit_opt : Critère demandé par l'utilisateur lors de la phase de calibration
+        alpha_opt, Vmax_opt : Paramètres optimaux du modèle de réservoir linéaire
+        """
+
+        #print("début calibration RL opti")
 
         alpha_0 = 0.0001
         Vmax_0 = 1
@@ -102,7 +113,7 @@ class RL(Model) :
             alpha_opt, Vmax_opt = c.optimize_criterion(alpha_0, Vmax_0, self.fct_calib, self.dict_crit, self.transfo)
             crit_opt, type_err = c.calculate_criteria(alpha_opt, Vmax_opt, self.fct_calib, self.dict_crit, self.transfo)
 
-        print("calibration RL opti finie")
+        #print("calibration RL opti finie")
 
         return crit_opt, alpha_opt, Vmax_opt
 
@@ -117,7 +128,7 @@ class RL(Model) :
         crit_val : la valeur du critere obtenue apres la validation
         """
 
-        print("début validation RL")
+        #print("début validation RL")
 
         # Extraction des donnees
 
@@ -149,11 +160,11 @@ class RL(Model) :
             self.validate_weights()
             crit_val, type_err = c.calculate_criteria(self.alpha, self.Vmax, self.fct_calib, self.dict_crit, self.transfo)
 
-        print("validation RL finie")
+        #print("validation RL finie")
 
         return crit_val
     
-    def prevision(self, bv:Jauge) -> tuple[pd.Series, pd.Series] :
+    def prevision(self, bv:Jauge) -> tuple[pd.Series, np.ndarray] :
         """
         Effectue une prevision des debits sur le bassin versant bv pour une certaine temporalite (t_prev)
         
@@ -165,7 +176,7 @@ class RL(Model) :
         Q_sim : Vecteur des débits simulés pendant la période d sous forme de panda Series
         """
 
-        print("début estimation RL")
+        #print("début estimation RL")
 
         # Extraction des donnees
 
@@ -204,7 +215,9 @@ class RL(Model) :
 
         Q_sim = self.alpha * V
 
-        print("estimation RL finie")
+        d = pd.Series(d, name="DatesR")
+
+        #print("estimation RL finie")
 
         return d, Q_sim
 

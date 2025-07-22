@@ -2,6 +2,7 @@
 import subprocess
 import os
 import sys
+import numpy as np
 import pandas as pd
 from typing import Optional
 
@@ -17,17 +18,22 @@ class HydroModPy(Model):
     Modele HydroModPy 
 
     Attributs
-    t_calib : période de calibration du modèle
-    t_valid : période de validation des débits
-    t_prev : période de prévision des débits
-    transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
-    fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
-    dict_crit : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
-    crit_calib : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
-    crit_valid : valeur du critere de validation obtenue lors de la validation de celui-ci
-    nom_model : nom du modele (GR4J)
-    sy : paramètre du modèle, coefficient de porosité
-    hk : paramètre du modèle, conductivité hydraulique
+    t_calib (datetime) : période de calibration du modèle
+    t_valid (datetime) : période de validation des débits
+    t_prev (datetime) : période de prévision des débits
+    transfo (list[str]) : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
+    fct_calib (str) : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    example_path (str) : chemin du dossier contenant les fonctions de HydroModPy
+    freq_input (str) : pas de temps pour le modèle (journalier, mensuel)
+    safransurfex (str) : chemin du dossier contenant les données REA
+    env_root (str) : chemin du fichier donnant l'environnement Python de HydroModPy
+    python_exe (str) : chemin correspondant aux exécutables Python
+    dict_crit ({str,float}) : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
+    crit_calib (float) : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
+    crit_valid (float) : valeur du critere de validation obtenue lors de la validation de celui-ci
+    nom_model (str) : nom du modele (GR4J)
+    sy (float) : paramètre du modèle, coefficient de porosité
+    hk (float) : paramètre du modèle, conductivité hydraulique
     """
 
     def __init__(self, t_calib_start:str, t_calib_end:str, t_valid_start:str, t_valid_end:str, t_prev_start:str, t_prev_end:str,
@@ -82,10 +88,13 @@ class HydroModPy(Model):
 
     def calibration(self, bv:Jauge) -> None:
         """
+        Effectue la calibration des paramètres du modèle HydroModPy sur une certaine temporalité (t_calib) à l'aide d'un subprocess appellant l'environemment HydroModPy correspondant
         
+        Paramètre d’entrée :
+        bv : Bassin versant jauge sur lequel on effectue la calibration
         """
 
-        print("début calibration HydroModPy")
+        #print("début calibration HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -138,15 +147,17 @@ class HydroModPy(Model):
         # else:
         #     print(result.stdout)
 
-        print("fin calibration HydroModPy")
-
+        #print("fin calibration HydroModPy")
 
     def validation(self, bv:Jauge) -> None:
         """
+        Effectue une validation des paramètres du modèle sur le bassin versant bv pour une certaine temporalité (t_valid) à l'aide d'un subprocess appellant l'environemment HydroModPy correspondant
         
+        Paramètre d’entrée :
+        bv : Bassin versant jauge sur lequel on effectue l'estimation
         """
 
-        print("début validation HydroModPy")
+        #print("début validation HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -199,14 +210,21 @@ class HydroModPy(Model):
         # else:
         #     print(result.stdout)
 
-        print("fin validation HydroModPy")
+        #print("fin validation HydroModPy")
 
-    def prevision(self, bv:Jauge) -> None:
+    def prevision(self, bv:Jauge) -> tuple[pd.Series, np.ndarray]:
         """
+        Effectue une prevision des debits sur le bassin versant bv pour une certaine temporalite (t_prev) à l'aide d'un subprocess appellant l'environemment HydroModPy correspondant
         
+        Paramètre d’entrée :
+        bv : Bassin versant jauge sur lequel on effectue l'estimation
+
+        Paramètres de sortie :
+        d : temporalité de l'estimation sous forme de panda Series
+        Q_sim : Vecteur des débits simulés pendant la période d sous forme de panda Series
         """
 
-        print("début prévision HydroModPy")
+        #print("début prévision HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -253,14 +271,14 @@ class HydroModPy(Model):
         # else:
         #     print(result.stdout)
 
-        print("fin prévision HydroModPy")
+        #print("fin prévision HydroModPy")
 
         prevision_results = f"{bv.watershed.basin_name}\\results_prevision\\prevision_qmod.csv"
         valid_results = pd.read_csv(os.path.join(bv.watershed.results_path, prevision_results))
 
         valid_results["date"] = pd.to_datetime(valid_results["date"])
 
-        dates = valid_results["date"]
-        qmod = valid_results["Qmod"]
+        d = valid_results["date"]
+        Q_sim = valid_results["Qmod"].to_numpy()
 
-        return dates, qmod
+        return d, Q_sim

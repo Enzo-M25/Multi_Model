@@ -8,22 +8,23 @@ class Pre_Process:
     Utilise la classe Watershed de HydroModPy pour afficher des informations sur le bassin versant choisi
 
     Attributs :
-    example_path : chemin du répertoire HydroModPy dans lequel le code tourne
-    data_path : chemin du répertoire dans lequel se trouve les données du bassin versant choisi
-    results_path : chemin du répertoire dans lequel enregistrer les résultats
-    basin_name : nom du bassin versant choisi
-    x,y : coordonnées de l'exutoire du bassin versant
-    dem_raster : chemin du fichier contenant les données régionales
-    hydrometry_csv : fichier dans data_path contenant les données de mesure de débits du bassin versant
-    year_start, year_end : années de début et de fin pour une analyse informelle des débits
-    example_year : année choisi pour donner un exemple sur un plot
+    example_path (str) : chemin du répertoire HydroModPy dans lequel le code tourne
+    data_path (str) : chemin du répertoire dans lequel se trouve les données du bassin versant choisi
+    results_path (str) : chemin du répertoire dans lequel enregistrer les résultats
+    basin_name (str) : nom du bassin versant choisi
+    departement (int) : numéro du département dans lequel est situé le bassin versant
+    x,y (float) : coordonnées de l'exutoire du bassin versant
+    dem_raster (str) : chemin du fichier contenant les données régionales
+    hydrometry_csv (str) : fichier dans data_path contenant les données de mesure de débits du bassin versant
+    year_start, year_end (int) : années de début et de fin pour une analyse informelle des débits
+    example_year (int) : année choisi pour donner un exemple sur un plot
         
-    env_root : chemin du répertoire où se trouve l'environnement hydromodpy-0.1
-    python_exe : exécutable python associé à l'environnement hydromodpy-0.1
+    env_root  (str) : chemin du répertoire où se trouve l'environnement hydromodpy-0.1
+    python_exe (str) : exécutable python associé à l'environnement hydromodpy-0.1
     """
 
     def __init__(self, example_path: str, data_path: str, results_path: str, basin_name: str,
-                 x: float, y: float, dem_raster: str, hydrometry_csv: str,
+                 departement:int, x: float, y: float, dem_raster: str, hydrometry_csv: str,
                  year_start: int, year_end: int, example_year: int,
                  env_root: str = r"C:\ProgramData\anaconda3\envs\hydromodpy-0.1"
                 ) :
@@ -33,6 +34,7 @@ class Pre_Process:
         self.data_path = data_path
         self.results_path = results_path
         self.basin_name = basin_name
+        self.departement = departement
         self.x = x
         self.y = y
         self.dem_raster = dem_raster
@@ -71,6 +73,7 @@ class Pre_Process:
             self.data_path, 
             self.results_path,
             self.basin_name,
+            str(self.departement),
             str(self.x),
             str(self.y),
             self.dem_raster,
@@ -92,5 +95,5 @@ class Pre_Process:
         if result.returncode != 0:
             print("Erreur d'exécution :", file=sys.stderr)
             print(result.stderr, file=sys.stderr)
-        else:
-            print(result.stdout)
+        # else:
+        #     print(result.stdout)

@@ -1,10 +1,6 @@
 
 # From HydroModPy
 
-# LIBRAIRIES
-
-# PYTHON
-
 # Filter warnings (before imports)
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
@@ -21,6 +17,7 @@ import os
 from sys import platform
 import geopandas as gpd
 from datetime import datetime
+from typing import Callable, Tuple, List
 
 # Libraries need to be installed if not
 import numpy as np
@@ -55,27 +52,55 @@ from src.tools import toolbox, folder_root
 fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
 
 def select_period(df, first, last):
+    """
+    Sélectionne les lignes d’un DataFrame en temps compris entre deux bornes
+
+    Paramètres d'entrée :
+    df : pandas.DataFrame contenant toutes les dates
+    first : Année de début (incluse) de la période à extraire.
+    last : Année de fin (incluse) de la période à extraire.
+
+    Paramètre de sortie
+    df : Sous-ensemble du df d'origine contenant uniquement les lignes dont l’année de l’index est comprise entre first et last
+    """
+
     df = df[(df.index.year>=first) & (df.index.year<=last)]
     return df
 
-def crit_nselog(simulations, evaluation):
+def crit_nselog(sim:pd.Series, obs:pd.Series) -> float:
     """
+    Calcule le NSE-log entre sim et obs
+
+    Paramètres d'entrée :
+    sim : débits simulés
+    obs : débits observés
     
+    Paramètre de sortie :
+    nselog : Valeur du NSE-log.
     """
 
-    simulations = 0.01 * simulations
-    evaluation = 0.01 * evaluation
+    epsilon = np.mean(obs)/100
+
+    sim = epsilon + sim
+    obs = epsilon + obs
 
     nselog = 1 - (
-            np.sum((np.log(evaluation) - np.log(simulations)) ** 2, axis=0, dtype=np.float64)
-            / np.sum((np.log(evaluation) - np.mean(np.log(evaluation))) ** 2, dtype=np.float64)
+            np.sum((np.log(obs) - np.log(sim)) ** 2, axis=0, dtype=np.float64)
+            / np.sum((np.log(obs) - np.mean(np.log(obs))) ** 2, dtype=np.float64)
     )
 
     return nselog
 
-def evalution_criteria(calib) :
+def evalution_criteria(calib:str) -> Tuple[Callable, int] :
     """
-    
+    Renvoie un tuple contenant les informations sur le critère demandé par l'utilisateur
+
+    Paramètre d'entrée :
+    calib : Critère de calibration demandé par l'utilisateur
+
+    Paramètres de sortie :
+    evaluation : Fonction de calcul correspondante au critère calib demandé
+    type_err : Valeur dont on cherche à se rapprocher lorsque l'on calcule le critère calib 
     """
 
     if calib ==  "crit_NSE" :
@@ -98,8 +123,26 @@ def evalution_criteria(calib) :
     
     return evaluation, type_err
 
+def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_path:str, data_path:str, x:float, y:float, safransurfex:str, dicharge_file:str,
+               hk_ms:float, sy:float, fct_calib:str, transfo:List[str], crit_list: List[str], weights_list: List[float]) -> None :
 
-def validation(nom_bv, first_year, last_year, freq_input, out_path, data_path, x, y, safransurfex, dicharge_file, hk_ms, sy, fct_calib, transfo, crit_list, weights_list) -> None :
+    """
+    Effectue une validation des paramètres du modèle
+
+    Paramètres d'entrée :
+    nom_bv : nom du bassin versant
+    first_year, last_year : années de début et de fin de calibration du modèle
+    freq_input : pas de temps pour le modèle (journalier, mensuel)
+    out_path : chemin du dossier où les résultats doivent être enregistrés
+    data_path : chemin du dossier contenant les données  du bassin versant pour HydroModPy
+    x, y : coordonnées de l'exutoire du bassin versant
+    safransurfex : chemin du dossier contenant les données REA
+    dicharge_file : chemin du fichie csv contenant les données de débits observés
+    hk_ms, sy : Paramètres optimaux du modèle retenus durant la phase de calibration
+    fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
+    crit_list, weights_list : dans le cas où la calibration s'effectue sur plusieurs critères, ces listes contiennent le nom des critères et les poids associés
+    """
 
     # PERSONAL PARAMETERS AND PATHS
     study_site = nom_bv
@@ -154,7 +197,7 @@ def validation(nom_bv, first_year, last_year, freq_input, out_path, data_path, x
 
     # Clip specific data at the catchment scale
     # BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
-    BV.add_hydrography(data_path, types_obs=['regional stream network']) 
+    #BV.add_hydrography(data_path, types_obs=['regional stream network']) 
     BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
     # BV.add_intermittency(data_path, 'regional onde stations.shp')
     # BV.add_piezometry()
@@ -433,7 +476,12 @@ def validation(nom_bv, first_year, last_year, freq_input, out_path, data_path, x
         Qmod = Smod['outflow_drain'] 
         Qmod = Qmod.squeeze()
         Qmod = Qmod*1000 # to mm
-        Qmod = (Qmod + (r * 1000)) 
+
+        if freq_input == 'M' :
+            Qmod = (Qmod + (r * 1000)) * Qmod.index.day
+        elif freq_input == 'W' :
+            Qmod = (Qmod + (r * 1000)) * 7
+
         print (f'valeur de Qmod : {Qmod}')
         # Rmod = Smod['recharge'] 
         # print (f'valeur de Rmod : {Rmod}')
@@ -604,6 +652,7 @@ if __name__ == "__main__":
     parser.add_argument("hk", type=float)
     parser.add_argument("sy", type=float)
     parser.add_argument("fct_calib")
+
 
     parser.add_argument(
         "--transfo",

@@ -6,6 +6,8 @@ os.environ['PATH'] = os.environ['PATH'] + os.pathsep + r'C:\Program Files\R\R-4.
 from rpy2.robjects import r, globalenv
 
 import pandas as pd
+import numpy as np
+from datetime import datetime
 from typing import Optional
 import rpy2.robjects as ro
 import rpy2.rinterface_lib.callbacks
@@ -23,16 +25,16 @@ class GR4J(Model) :
     #TODO Attention le package airGR a été modifié afin de prendre en compte de nouvelles fcts de calcul de critères
 
     Attributs
-    t_calib : période de calibration du modèle
-    t_valid : période de validation des débits
-    t_prev : période de prévision des débits
-    transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
-    fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
-    dict_crit : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
-    crit_calib : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
-    crit_valid : valeur du critere de validation obtenue lors de la validation de celui-ci
-    nom_model : nom du modele (GR4J)
-    x : liste des parametres du modele
+    t_calib (datetime) : période de calibration du modèle
+    t_valid (datetime) : période de validation des débits
+    t_prev (datetime) : période de prévision des débits
+    transfo (list[str]) : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
+    fct_calib (str) : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    dict_crit ({str,float}) : (optionnel dans le cas d'un seul critere) dictionnaire des noms des criteres sur lesquels on effectue la calibration associes à leurs poids respectifs
+    crit_calib (float) : meilleure valeur du critere de calibration obtenue lors de la calibration de celui-ci
+    crit_valid (float) : valeur du critere de validation obtenue lors de la validation de celui-ci
+    nom_model (str) : nom du modele (GR4J)
+    x (list[float]) : liste des parametres du modele
     """
 
     def __init__(self, t_calib_start:str, t_calib_end:str, t_valid_start:str, t_valid_end:str, t_prev_start:str, t_prev_end:str,
@@ -42,7 +44,7 @@ class GR4J(Model) :
         self.nom_model = "GR4J"
         self.x: float | None = None
 
-    def idx_range(self, df:pd.DataFrame, start:str, end:str):
+    def idx_range(self, df:pd.DataFrame, start:datetime, end:datetime) -> list[int] :
         """
         Renvoie la liste des indices correspondant aux lignes de df["DatesR"] comprises entre deux dates données (incluses).
 
@@ -70,7 +72,7 @@ class GR4J(Model) :
         self.crit_calib, self.x = self.calibration(bv)
         self.crit_valid = self.validation(bv)
 
-    def calibration(self, bv:Jauge) -> tuple[float,float,float] :
+    def calibration(self, bv:Jauge) -> tuple[float,list[float]] :
         """
         Calibre le modele GR4J sur le bassin versant bv et recupere les parametres de calibration ainsi que le critere obtenus lors de celle-ci
         
@@ -82,7 +84,7 @@ class GR4J(Model) :
         x : liste des parametres du modele
         """
 
-        print("début calibration GR4J")
+        #print("début calibration GR4J")
 
         bv.donnees["DatesR"] = pd.to_datetime(bv.donnees["tsd_date"].astype(str), format="%Y%m%d")
 
@@ -209,7 +211,7 @@ class GR4J(Model) :
         crit_val = float(crit_v[0])
         Param_r = ro.globalenv["Param"]
 
-        print("fin calibration GR4J")
+        #print("fin calibration GR4J")
 
         return crit_val, list(Param_r)
 
@@ -224,7 +226,7 @@ class GR4J(Model) :
         crit_val : la valeur de NSE obtenue apres l'estimation
         """
 
-        print("début validation GR4J")
+        #print("début validation GR4J")
 
         bv.donnees["DatesR"] = pd.to_datetime(bv.donnees["tsd_date"].astype(str), format="%Y%m%d")
 
@@ -241,13 +243,6 @@ class GR4J(Model) :
         ro.globalenv["transfo"] = r_transfo
 
         if self.has_dict_crit() and self.fct_calib == "crit_mix":
-
-            if len(self.transfo) != len(self.dict_crit):
-                raise ValueError(
-                    f"Incohérence entre le nombre de transformations ({len(self.transfo)}) "
-                    f"et le nombre de critères ({len(self.dict_crit)})."
-                )
-
 
             self.validate_weights()
 
@@ -341,11 +336,11 @@ class GR4J(Model) :
         crit_v = ro.globalenv["OutputsCritSim"]
         crit_val = float(crit_v[0])
 
-        print("validation GR4J finie")
+        #print("validation GR4J finie")
 
         return crit_val
     
-    def prevision(self, bv:Jauge) -> tuple[pd.Series, pd.Series] :
+    def prevision(self, bv:Jauge) -> tuple[pd.Series, np.ndarray] :
         """
         Effectue une prevision des débits sur le bassin versant bv pour une certaine temporalité (t_prev)
         
@@ -357,7 +352,7 @@ class GR4J(Model) :
         Q_sim : Vecteur des débits simulés pendant la période d sous forme de panda Series
         """
 
-        print("début prévision GR4J")
+        #print("début prévision GR4J")
 
         Param = self.x
 
@@ -396,6 +391,6 @@ class GR4J(Model) :
 
         Q_sim = ro.globalenv["OutputsModel"].rx2("Qsim")
 
-        print("prévision GR4J finie")
+        #print("prévision GR4J finie")
 
         return d, Q_sim

@@ -1,10 +1,5 @@
 
-
 # From HydroModPy
-
-# LIBRAIRIES
-
-# PYTHON
 
 # Filter warnings (before imports)
 import warnings
@@ -41,8 +36,6 @@ wbt.verbose = False
 import xarray as xr
 xr.set_options(keep_attrs = True)
 
-
-
 from os.path import dirname, abspath
 root_dir = r"C:\USERS\enzma\Documents\HydroModPy"
 sys.path.append(root_dir)
@@ -58,11 +51,37 @@ from src.tools import toolbox, folder_root
 fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
 
 def select_period(df, first, last):
+    """
+    Sélectionne les lignes d’un DataFrame en temps compris entre deux bornes
+
+    Paramètres d'entrée :
+    df : pandas.DataFrame contenant toutes les dates
+    first : Année de début (incluse) de la période à extraire.
+    last : Année de fin (incluse) de la période à extraire.
+
+    Paramètre de sortie
+    df : Sous-ensemble du df d'origine contenant uniquement les lignes dont l’année de l’index est comprise entre first et last
+    """
+
     df = df[(df.index.year>=first) & (df.index.year<=last)]
     return df
 
+def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_path:str, data_path:str, x:float, y:float, safransurfex:str, discharge_file:str, hk_ms:float, sy:float) -> None :
 
-def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x, y, safransurfex, discharge_file, hk_ms, sy) -> None :
+    """
+    Effectue une prévision des débits en fonction des paramètres rentrés par l'utilisateur
+
+    Paramètres d'entrée :
+    nom_bv : nom du bassin versant
+    first_year, last_year : années de début et de fin de calibration du modèle
+    freq_input : pas de temps pour le modèle (journalier, mensuel)
+    out_path : chemin du dossier où les résultats doivent être enregistrés
+    data_path : chemin du dossier contenant les données  du bassin versant pour HydroModPy
+    x, y : coordonnées de l'exutoire du bassin versant
+    safransurfex : chemin du dossier contenant les données REA
+    discharge_file : chemin du fichie csv contenant les données de débits observés
+    hk_ms, sy : Paramètres optimaux du modèle retenus durant la phase de calibration
+    """
 
     # PERSONAL PARAMETERS AND PATHS
     study_site = nom_bv
@@ -77,8 +96,6 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
 
     print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
 
-    # OPTIONS
-    # Name of the study site
     watershed_name = '_'.join([study_site])
 
     print('##### '+watershed_name.upper()+' #####')
@@ -117,7 +134,7 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
 
     # Clip specific data at the catchment scale
     # BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
-    BV.add_hydrography(data_path, types_obs=['regional stream network']) 
+    #BV.add_hydrography(data_path, types_obs=['regional stream network']) 
     BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
     # BV.add_intermittency(data_path, 'regional onde stations.shp')
     # BV.add_piezometry()
@@ -193,9 +210,7 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
     # Qobs FORMATTING et F normalization 
     Qobs_path = os.path.join(data_path,discharge_file)
     Qobs = pd.read_csv(Qobs_path, delimiter=',')
-    #print (Qobs.columns)
-    #print(Qobs.head())
-    # Split the values at 'T' for the 'Date(TU)' column and remove the values after 'T'
+    
     Qobs["Date (TU)"] = Qobs["Date (TU)"].str.split('T').str[0]
     Qobs["Date (TU)"] = pd.to_datetime(Qobs["Date (TU)"], format='%Y-%m-%d')
     Qobs.set_index("Date (TU)", inplace=True)
@@ -233,7 +248,6 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
     box = True # or False
     sink_fill = False # or True
 
-    # sim_state = 'transient' # 'steady' or 'transient'
     sim_state = sim_state # 'steady' or 'transient'
     plot_cross = False
     dis_perlen = True
@@ -257,12 +271,6 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
     bc_right = None # or value
     sea_level = 'None' # or value based on specific data : BV.oceanic.MSL
     split_temp = True
-
-    # # Particle tracking settings
-    # zone_partic = 'domain' # or watershed
-
-    # plt.plot(hk/R)
-    # plt.yscale('log')
 
     iD_set_simulations = 'explorSy_test1'
 
@@ -384,17 +392,13 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
         Qmod = Smod['outflow_drain'] 
         Qmod = Qmod.squeeze()
         Qmod = Qmod*1000 # to mm
-        Qmod = (Qmod + (r * 1000)) 
+
+        if freq_input == 'M' :
+            Qmod = (Qmod + (r * 1000)) * Qmod.index.day
+        elif freq_input == 'W' :
+            Qmod = (Qmod + (r * 1000)) * 7
+
         print (f'valeur de Qmod : {Qmod}')
-        # Rmod = Smod['recharge'] 
-        # print (f'valeur de Rmod : {Rmod}')
-        
-        yearsmaj = mdates.YearLocator(1)   # every year
-        yearsmin = mdates.YearLocator(1)
-        # monthsmaj = mdates.MonthLocator(6)  # every month
-        # monthsmin = mdates.MonthLocator(3)
-        # months_fmt = mdates.DateFormatter('%m') #b = name of month ?
-        years_fmt = mdates.DateFormatter('%Y')
 
         Qmod_stat = select_period(Qmod,first_year,last_year)
 
@@ -408,6 +412,7 @@ def prevision(nom_bv, first_year, last_year, freq_input, out_path, data_path, x,
             os.path.join(prev_folder, 'prevision_qmod.csv'),
             index=False
         )
+
 
 if __name__ == "__main__": 
     

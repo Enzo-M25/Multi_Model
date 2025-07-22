@@ -1,4 +1,3 @@
-
   
 import pandas as pd
 import numpy as np
@@ -7,6 +6,7 @@ from multiprocessing import Pool, cpu_count, current_process
 
 from Critereprev import Critereprev
 from Jauge import Jauge
+from Model_folder import Model
 from Model_folder.RL import RL
 from Model_folder.GR4J import GR4J
 from Model_folder.HydroModPy import HydroModPy
@@ -18,46 +18,67 @@ import os
 from os.path import dirname, abspath
 from datetime import datetime, date
 
-def critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit) -> float :
-    crit = 0
+def apply_transform(obs:np.ndarray, sim:np.ndarray, mode:str, model:Model) -> tuple[np.ndarray, np.ndarray] :
+    """
+    Retourne obs_t, sim_t selon mode (None, "log", "inv")
 
-    if fct_calib == "crit_mix" :
+    Paramètres d'entrée :
+    obs : Valeur des débits observées
+    sim : Valeur des débits simulés
+    mode : transformation à appliquer
+    model : Le modèle sur lequel on effectue le calcul du critère
 
-        total_weight = sum(list(dict_crit.values()))
+    Paramètre de sortie :
+    obs-f, sim_f : Débits observés et simulés après application de la transformation
+    """
+    obs_f = obs.astype(float)
+    sim_f = sim.astype(float)
+    if mode == "log":
+        Qbar = obs_f.mean()
+        eps = 0 if model.nom_model == "GR4J" else Qbar / 100
+        return np.log(obs_f + eps), np.log(sim_f + eps)
+    elif mode == "inv":
+        return 1 / obs_f, 1 / sim_f
+    else:
+        return obs_f, sim_f
+
+def critere_prevision(model: Model, Q_obs: pd.Series, Q_sim: pd.Series, fct_calib: str, transfo: list[str], dict_crit: dict[str, float]) -> float:
+    """
+    Calcule la valeur du critère choisi pour un model et une transformation des débits donnés
+
+    Paramètres d'entrée :
+    model : Le modèle sur lequel on effectue le calcul du critère
+    Q_obs : Valeur des débits observées
+    Q_sim : Valeur des débits simulés
+    fct_calib : Critère à calculer
+    transfo : Transformation à appliquer sur les débits
+    dict_crit : Dictionnaire donnant le nom et le poids des critères sélectionnés dans un cas où l'on fait le choix d'un critère multiple
+
+    Paramètre de sortie :
+    crit : Valeur du critère calculée
+    """
+
+    crit = 0.0
+
+    if fct_calib == "crit_mix":
+        total_weight = sum(dict_crit.values())
         if total_weight == 0:
             raise ValueError("La somme des poids est nulle, impossible de normaliser")
 
-        for i, crit_fct in enumerate(list(dict_crit.keys())) :
-            elem = transfo[i]
-            if elem == "":
-                elem = None
-                critere = Critereprev(Q_obs,Q_sim)
-            elif elem == "log":
-                Q_bar = np.mean(Q_obs)
-                eps = 0 if model.name == "GR4J" else Q_bar / 100
-                critere = Critereprev(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
-            elif elem == "inv" :
-                critere = Critereprev(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
-            methode = getattr(critere, crit_fct)
-            valeur = methode()
-            crit += dict_crit.values()[i] * valeur
-        crit = crit / total_weight
+        for idx, (crit_name, weight) in enumerate(dict_crit.items()):
+            mode = transfo[idx] or None
+            obs_t, sim_t = apply_transform(Q_obs, Q_sim, mode, model)
+            cp = Critereprev(obs_t, sim_t)
+            value = getattr(cp, crit_name)()
+            crit += weight * value
 
-    else :
-        elem = transfo[0]
-        if elem == "":
-            elem = None
-            critere = Critereprev(Q_obs,Q_sim)
-        elif elem == "log":
-            Q_bar = np.mean(Q_obs)
-            eps = 0*Q_bar/100
-            critere = Critereprev(np.log(Q_obs.astype(float) + eps),np.log(Q_sim.astype(float) + eps))
-        elif elem == "inv" :
-            critere = Critereprev(1/(Q_obs.astype(float)),1/(Q_sim.astype(float)))
-        methode = getattr(critere, fct_calib)
-        crit = methode()
-    
-    return crit
+        return crit / total_weight
+
+    else:
+        mode = transfo[0] or None
+        obs_t, sim_t = apply_transform(Q_obs, Q_sim, mode, model)
+        cp = Critereprev(obs_t, sim_t)
+        return getattr(cp, fct_calib)()
 
 def parse_date(d:str) -> datetime :
     """
@@ -134,7 +155,7 @@ def process_file(args):
         
         
         model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-                            'D', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+                            'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
         model3.param_calib(bv)
         mac.add_model(model3)
 
@@ -151,19 +172,20 @@ def process_file(args):
             else :
                 raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
 
-            if model.name == "RL" :
+            if model.nom_model == "RL" :
                 best_RL = "Yes"
                 crit_prev_RL = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
-            elif model.name == "GR4J" :
+            elif model.nom_model == "GR4J" :
                 best_GR4J = "Yes"
                 crit_prev_GR4J = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
-            elif model.name == "HydroModpy" :
+            elif model.nom_model == "HydroModpy" :
                 best_HMP = "Yes"
                 crit_prev_HMP = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
 
     except Exception as e:
         print(f"Erreur station {nom} : {e}")
 
+    print(f"[{proc} | PID {pid}] a fini de traiter le bv {nom}")
 
     return {
         "nom"         : nom,
@@ -186,37 +208,11 @@ def process_file(args):
         "valid_HMP"   : getattr(model3, "crit_valid", None),
         "prev_HMP"    : crit_prev_HMP,
     }
-
-        # return {
-        #     "nom" : nom,
-        #     "id" : id, 
-        #     "HydroModPy" : best_HMP,
-        #     "sy" : model3.sy,
-        #     "hk" : model3.hk,
-        #     "calib_HMP" : model3.crit_calib,
-        #     "valid_HMP" : model3.crit_valid,
-        #     "prev_HMP" : crit_prev_HMP,
-        #     "GR4J" : best_GR4J,
-        #     "X1" : model2.x[0],
-        #     "X2" : model2.x[1],
-        #     "X3" : model2.x[2], 
-        #     "X4" : model2.x[3],
-        #     "calib_GR4J" : model2.crit_calib,
-        #     "valid_GR4J" : model2.crit_valid,
-        #     "prev_GR4J" : crit_prev_GR4J,
-        #     "RL" : best_RL,
-        #     "alpha" : model1.alpha,
-        #     "Vmax" : model1.Vmax,
-        #     "calib_RL" : model1.crit_calib,
-        #     "valid_RL" : model1.crit_valid,
-        #     "prev_RL" : crit_prev_RL
-        # }
-
     
 def main():
     
-    df_ref = pd.read_csv("ref_stations_mini.csv") #TODO
-    args_list = list(zip(df_ref["nom"], df_ref["id"], df_ref["x"], df_ref["y"]))
+    df_ref = pd.read_csv("ref_stations_mini.csv", sep=";") #TODO
+    args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"]))
 
     n_procs = min(cpu_count(), 10)
     print(f"Démarrage du pool avec {n_procs} processus...")
@@ -229,8 +225,9 @@ def main():
     # Création du DataFrame et export
     df_res = pd.DataFrame(rows)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    summary_path = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}.csv")
+    summary_path = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_mini.csv")
     df_res.to_csv(summary_path, index=False)
+    pd.DataFrame([{"elapsed_time_s": elapsed}]).to_csv(summary_path, mode="a", header=False, index=False)
     print(f"Résumé des calibrations pour {fct_calib} et transfo {transfo} écrit dans {summary_path}")
     print(f"⏱️ Temps parallèle : {elapsed:.2f}s")
 

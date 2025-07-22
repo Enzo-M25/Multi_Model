@@ -9,8 +9,9 @@ class CritereRL :
     Regroupe differentes fonctions permettant de calculer des criteres de performances pour le modele de reservoir lineaire
 
     Attributs
-    Q_obs : Vecteur des débits mesurés sur une certaine période
-    Q_sim : Vecteur des débits simulés sur une certaine période
+    Q (ndarray) : Vecteur des débits mesurés sur une certaine période
+    R (ndarray) : Vecteur des recharges (précipitations - évapotranspiration)
+    delta_t (float) : pas de temps (en jour) pour effectué les calculs
     """
 
     def __init__(self, Q:np.ndarray, R:np.ndarray, delta_t:float):
@@ -22,9 +23,9 @@ class CritereRL :
         self.R = R
         self.delta_t = delta_t
 
-    def crit_NSE(self, obs, sim) -> float :
+    def crit_NSE(self, obs:np.ndarray, sim:np.ndarray) -> float :
         """
-        Calcule le critere NSE correspondant
+        Calcule le NSE entre obs et sim
 
         Paramètre de sortie :
         Valeur du NSE
@@ -35,9 +36,9 @@ class CritereRL :
         denom = np.sum((obs - Q_bar) ** 2)
         return 1 - num / denom
     
-    def crit_NSE_log(self, obs, sim) -> float :
+    def crit_NSE_log(self, obs:np.ndarray, sim:np.ndarray) -> float :
         """
-        Calcule le critère NSE-log
+        Calcule le NSE-log entre obs et sim
         
         Parametre de sortie :
         Valeur du NSE-log.
@@ -54,21 +55,20 @@ class CritereRL :
         den = np.sum((log_obs - np.mean(log_obs)) ** 2)
         return 1 - num / den
     
-    def crit_RMSE(self, obs, sim) -> float:
+    def crit_RMSE(self, obs:np.ndarray, sim:np.ndarray) -> float:
         """
-        Calcule le Root Mean Squared Error (RMSE) entre Q_obs et Q_sim.
+        Calcule le RMSE entre obs et sim.
 
-        Returns
-        -------
+        Paramètre de sortie :
         Valeur du RMSE.
         """
         
         return np.sqrt(np.mean((obs - sim) ** 2))
     
-    def crit_KGE(self, obs, sim) -> float:
+    def crit_KGE(self, obs:np.ndarray, sim:np.ndarray) -> float:
 
         """
-        Calcule l'indice Kling-Gupta Efficiency (KGE)
+        Calcule le KGE entre obs et sim
 
         Parametre de sortie
         Valeur du KGE.
@@ -87,10 +87,10 @@ class CritereRL :
 
         return 1 - np.sqrt((r - 1)**2 + (alpha - 1)**2 + (beta - 1)**2)
     
-    def crit_Biais(self, obs, sim) -> float:
+    def crit_Biais(self, obs:np.ndarray, sim:np.ndarray) -> float:
 
         """
-        Calcule le biais en pourcentage
+        Calcule le biais en pourcentage entre obs et sim
 
         Parametre de sortie :
         Valeur du biais en % 
@@ -102,7 +102,14 @@ class CritereRL :
     
     def _simulate_reservoir(self, alpha: float, Vmax: float) -> np.ndarray:
         """
-        Simule le modèle du réservoir avec les paramètres donnés
+        Simule le modèle du réservoir linéaire avec les paramètres alpha et Vmax
+        dV(t)/dt + alpha*V(t) = R(t) ; 0 <= V(t) <= Vmax ; Q(t) = alpha*V(t)
+
+        Paramètres d'entrée :
+        alpha, Vmax : Paramètres du réservoir linéaire
+
+        Paramètre de sortie :
+        Q_sim : Vecteur des débits simulés calculés par le réservoir linéaire
         """
 
         exp_alpha = np.exp(-alpha * self.delta_t)
@@ -118,9 +125,16 @@ class CritereRL :
         
         return alpha * V  # Q_sim
     
-    def _evalution_criteria(self, calib) -> Tuple[Callable, int] :
+    def _evalution_criteria(self, calib:str) -> Tuple[Callable, int] :
         """
-        
+        Renvoie un tuple contenant les informations sur le critère demandé par l'utilisateur
+
+        Paramètre d'entrée :
+        calib : Critère de calibration demandé par l'utilisateur
+
+        Paramètres de sortie :
+        evaluation : Fonction de calcul correspondante au critère calib demandé
+        type_err : Valeur dont on cherche à se rapprocher lorsque l'on calcule le critère calib 
         """
 
         if calib ==  "crit_NSE" :
@@ -143,9 +157,19 @@ class CritereRL :
         
         return evaluation, type_err
     
-    def calculate_criteria(self, alpha, Vmax, fct_calib, dict_crit, transfo) -> float :
+    def calculate_criteria(self, alpha:float, Vmax:float, fct_calib:str, dict_crit:dict[str,float], transfo:list[str]) -> Tuple[float,float] :
         """
+        Renvoie un tuple contenant les informations (valeur obtenue et valeur recherchée) après calcul sur le critère demandé par l'utilisateur
+
+        Paramètres d'entrée :
+        alpha, Vmax : Paramètres du modèle de réservoir linéaire
+        fct_calib : Critère à calculer
+        dict_crit : Dictionnaire donnant le nom et le poids des critères sélectionnés dans un cas où l'on fait le choix d'un critère multiple
+        transfo : Transformation à appliquer sur les débits
         
+        Paramètres de sortie :
+        crit : Valeur du critère choisi par l'utilisateur
+        type_err : Valeur dont on cherche à se rapprocher lorsque l'on calcule le critère calib 
         """
 
         Q_obs = self.Q
@@ -202,7 +226,19 @@ class CritereRL :
 
         return crit, type_err
 
-    def _erreur_modele_norm(self, x, fct_calib, dict_crit, transfo) -> float :
+    def _erreur_modele_norm(self, x:Tuple[float,float], fct_calib:str, dict_crit:dict[str,float], transfo:list[str]) -> float :
+        """
+        Calcule la différence entre type_err et la valeur du critère obtenu après calcul  |type_err - crit|
+
+        Paramètres d'entrée :
+        x = alpha, Vmax : Paramètres du modèle de réservoir linéaire
+        fct_calib : Critère à calculer
+        dict_crit : Dictionnaire donnant le nom et le poids des critères sélectionnés dans un cas où l'on fait le choix d'un critère multiple
+        transfo : Transformation à appliquer sur les débits
+        
+        Paramètre de sortie :
+        error : |type_err - crit| (plus cette valeur est proche de 0, plus le modèle est bon)
+        """
 
         alpha, Vmax = x
 
@@ -215,9 +251,18 @@ class CritereRL :
         
         return error
     
-    def optimize_criterion(self, alpha, Vmax, fct_calib, dict_crit, transfo) -> Tuple[float,float]:
+    def optimize_criterion(self, alpha:float, Vmax:float, fct_calib:str, dict_crit:dict[str,float], transfo:list[str]) -> Tuple[float,float]:
         """
+        Calcule à l'aide d'un simplexe les paramètres optimaux du modèle de réservoir linéaire
+
+        Paramètres d'entrée :
+        alpha, Vmax : Paramètres du modèle de réservoir linéaire
+        fct_calib : Critère à calculer
+        dict_crit : Dictionnaire donnant le nom et le poids des critères sélectionnés dans un cas où l'on fait le choix d'un critère multiple
+        transfo : Transformation à appliquer sur les débits
         
+        Paramètres de sortie :
+        alpha_opt, Vmax_opt : Les paramètres optimaux du réservoir linéaire après calcul
         """
 
         x0 = [alpha, Vmax]
