@@ -1,4 +1,5 @@
 
+
 # From HydroModPy
 
 # Librairies
@@ -16,14 +17,14 @@ import argparse
 import sys
 import glob
 import logging
+import imageio
 import os
 import shutil
-from typing import List, Callable, Any, Tuple, Dict
-from PIL import Image
-from sys import platform
 import geopandas as gpd
+from typing import List, Callable, Any, Tuple, Dict
 from datetime import datetime
 from scipy.optimize import minimize
+from MatchingStreams import MatchingStreams
 
 # Libraries need to be installed if not
 import numpy as np
@@ -33,8 +34,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 # # Libraries added from 'pip install' procedure
-import deepdish as dd
-import imageio
 import hydroeval as he
 import whitebox
 wbt = whitebox.WhiteboxTools()
@@ -56,7 +55,6 @@ from src.display import visualization_watershed, visualization_results, export_v
 from src.tools import toolbox, folder_root
 
 fontprop = toolbox.plot_params(8,15,18,20) # small, medium, interm, large
-
 
 
 def select_period(df, first, last):
@@ -211,33 +209,148 @@ def evalution_criteria(calib:str) -> Tuple[Callable, int] :
     
     return evaluation, type_err
 
-def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tuple[float,float], loghk_min_max:Tuple[float,float], BV:Any,
-                       thick:float, calibration_folder:str, use_filter:Tuple[bool,bool], calib_dates:Tuple[str,str], season_start_end:Tuple[int,int,int,int],
-                       Qobsmm:pd.Series, freq_input:str, Qobsdaymm:pd.Series, Qobsweekmm:pd.Series, years:Tuple[int,int], r:pd.Series, Qobsmonthmm:pd.Series,
-                       optimization_results:Dict[str,Any], all_Qmod_Qobs_results:List[Any], optim_folder:str, all_simulations_results:List[Dict[str,Any]],
-                       transfo:List[str], fct_calib:str, crit_list:List[str], weights_list:List[float]) -> float:
+def erreur_modele_norm_hk(params_norm:float, compt:int, loghk_min_max:Tuple[float,float], BV:Any,
+                       thick:float, optimization_results:Dict[str,Any], optim_folder:str, all_simulations_results:List[Dict[str,Any]]) -> float :
+    
+    """
+    Renvoie l'erreur commise entre le réseau hydrographique simulé et observé lors  d'une simulation avec hk
+
+    Paramètres d'entrée :
+    params_norm : Paramètre hk à tester pour le modèle
+    compt : nombre de tentatives
+    loghk_min_max : Bornes dans lesquelles doit se trouver log(hk)
+    BV : instance de Watershed représentant le bassin versant
+    thick : épaisseur sélectionnée pour le modèle
+    optimization_results, all_simulations_results : fichiers contenant les résultats --- enregistrés dans optim_folder
+    optim_folder : dossier contenant les résultats
+
+    Paramètre de sortie :
+    error : erreur entre le réseau observé et simulé
+    """
+
+    log_hk_min = loghk_min_max[0]
+    log_hk_max = loghk_min_max[1]
+
+    log_hk_value = denormalize(params_norm[0], log_hk_min, log_hk_max)
+    hk_value = 10**log_hk_value 
+    
+    BV.hydraulic.update_hk(hk_value)
+
+    # Model name
+    timestamp = datetime.now().strftime("%H%M%S") #permet d'afficher l'heure à laquelle le script à tourner
+    model_name = f"optim_{compt}_{timestamp}_hk{hk_value/24/3600:.2e}ms"#_hk_decay{hk_decay_value:.3f}"
+    logging.info(f"\nSimulation {compt}: hk={hk_value/24/3600:.2e}m/s")#, hk_decay={hk_decay_value:.3f}m")
+    BV.settings.update_model_name(model_name)
+    BV.settings.update_check_model(plot_cross=False, check_grid=True)
+
+    model_modflow = BV.preprocessing_modflow(for_calib=True)
+    success_modflow = BV.processing_modflow(model_modflow, write_model=True, run_model=True)
+
+    if not success_modflow:
+        print("Échec de la simulation!")
+        compt += 1  # Still increment counter on failure
+        return 1e6
+
+    BV.postprocessing_modflow(model_modflow,
+                                watertable_elevation=True,
+                                seepage_areas=True,
+                                outflow_drain=True,
+                                accumulation_flux=True,
+                                watertable_depth=True,
+                                groundwater_flux=False,
+                                groundwater_storage=False,
+                                #intermittency_yearly=True,
+                                export_all_tif=False)
+
+    # Matching streams
+    iter_results = MatchingStreams(BV, iteration_label=model_name, from_calib=True)
+    obsf_to_simf = gpd.read_file(os.path.join(BV.calibration_folder, model_name, '_matchingstreams', 'obsflowf.shp'))
+    simf_to_obsf = gpd.read_file(os.path.join(BV.calibration_folder, model_name, '_matchingstreams', 'simflowf.shp'))
+
+    mean_obsf_to_simf = np.nanmean(obsf_to_simf[obsf_to_simf['VALUE1'] >= 0]['VALUE1'])
+    mean_simf_to_obsf = np.nanmean(simf_to_obsf[simf_to_obsf['VALUE1'] >= 0]['VALUE1'])
+
+    obs_distance = mean_obsf_to_simf
+    sim_distance = mean_simf_to_obsf
+    
+    obs_pixel = mean_obsf_to_simf
+    sim_pixel = mean_simf_to_obsf
+    
+    matching = sim_pixel / obs_pixel
+    print('INDICATORMATCHINGSRTEAM : ', matching)
+    errormatchingstream = 1-(1/(1+abs(np.log(matching)))) 
+    # Store results in dictionary
+    optimization_results["model_name"] = model_name
+    optimization_results["model_modflow"] = model_modflow
+
+    if np.isnan(errormatchingstream) or obs_distance == 0:
+        return np.inf  # Large error if indicator is invalid
+    
+    error = errormatchingstream # Average error between NSElog and matching streams
+
+    current_simulation = {
+        "obs_distance": obs_distance,
+        "sim_distance": sim_distance,
+        "obs_pixel": obs_pixel,
+        "sim_pixel": sim_pixel,
+        "iteration": compt,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_name": model_name,
+        "hk": hk_value,
+        "hk_ms": hk_value/24/3600,
+        "log_hk": log_hk_value,  # Ajout du log(hk) dans les résultats
+        "thick": thick,
+        "matchingstream": matching,
+        'errormatchingstream': errormatchingstream,
+        "error": error,
+    }
+    
+    # Append the results to the list
+    all_simulations_results.append(current_simulation)
+
+    pd.DataFrame(all_simulations_results).to_csv(
+        os.path.join(optim_folder, 'all_simulations_results_stream.csv'), 
+        index=False
+    )
+
+    # Save if the error is the best so far
+    if error < optimization_results["best_error"]:
+        optimization_results["model_name"] = model_name
+        optimization_results["model_modflow"] = model_modflow
+        optimization_results["best_error"] = error
+        optimization_results["best_params"] = {
+            "hk": hk_value,
+            "log_hk": log_hk_value,  # Ajout du log(hk) dans les meilleurs paramètres
+        }
+        logging.info("► Meilleure simulation jusqu'à présent ◄")
+
+    compt += 1
+    return error
+
+def erreur_modele_norm_sy(params_norm:float, compt:int, sy_min_max:Tuple[float,float], BV:Any,calibration_folder:str, use_filter:Tuple[bool,bool],
+                          calib_dates:Tuple[str,str], season_start_end:Tuple[int,int,int,int], Qobsmm:pd.Series, freq_input:str,
+                          Qobsweekmm:pd.Series, years:Tuple[int,int], r:pd.Series, Qobsmonthmm:pd.Series, optimization_results:Dict[str,Any], optim_folder:str,
+                          all_simulations_results:List[Dict[str,Any]], transfo:List[str], fct_calib:str, crit_list:List[str], weights_list:List[float]) -> float :
     
     """
     Renvoie l'erreur commise lors du calcul du critère choisi par l'utilisateur avec les paramètres sélectionnés
 
     Paramètres d'entrée :
-    params_norm : Paramètres hk et sy à tester pour le modèle
+    params_norm : Paramètre sy à tester pour le modèle
     compt : nombre de tentatives
     sy_min_max : Bornes dans lesquelles doit se trouver sy
-    loghk_min_max : Bornes dans lesquelles doit se trouver log(hk)
     BV : instance de Watershed représentant le bassin versant
-    thick : épaisseur sélectionnée pour le modèle
     calibration_folder : chemin du dossier dans lequel sont sauvegardés les résultats de calibration
     use_filter : (use_time_filter, use_seasonal_filter) :
         - use_time_filter : appliquer le filtre de période calée sur `calib_dates`
         - use_seasonal_filter : restreindre en plus à la saison définie
     calib_dates : (date_de_début, date_de_fin) de la période de calibration
     season_start_end : (mois_début, jour_début, mois_fin, jour_fin) de la saison à retenir
-    Qobsmm, Qobsdaymm, Qobsweekmm, Qobsmonthmm : débits observés sur différentes périodes
+    Qobsmm, Qobsweekmm, Qobsmonthmm : débits observés sur différentes périodes
     freq_input : pas de temps pour le modèle (journalier, mensuel)
     years : first_year et last_year pour la calibration
     r : Ruisselement
-    optimization_results, all_Qmod_Qobs_results, all_simulations_results : fichiers contenant les résultats --- enregistrés dans optim_folder
+    optimization_results, all_simulations_results : fichiers contenant les résultats --- enregistrés dans optim_folder
     optim_folder : dossier contenant les résultats
     transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
     fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
@@ -250,24 +363,16 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
     sy_min = sy_min_max[0]
     sy_max = sy_min_max[1]
 
-    log_hk_min = loghk_min_max[0]
-    log_hk_max = loghk_min_max[1]
-
     first_year = years[0]
     last_year = years[1]
 
-    sy = denormalize(params_norm[1], sy_min, sy_max)
-    log_hk = denormalize(params_norm[0], log_hk_min, log_hk_max)
-    hk = 10**log_hk  # Convert log(K) to hk
-    print(f'hk = {hk/24/3600}')
+    sy_value = denormalize(params_norm[0], sy_min, sy_max)   
+    BV.hydraulic.update_sy(sy_value)
 
-    # BV.hydraulic.update_thick(thick)
-    BV.hydraulic.update_sy(sy)
-    BV.hydraulic.update_hk(hk)
-
-    timestamp = datetime.now().strftime("%H%M%S")
-    model_name = f"optim_{compt}_{timestamp}_hk{hk/24/3600:.2e}_sy{sy*100:.2f}%_th{thick:.1f}"
-    logging.info(f"\nSimulation {compt}: hk={hk/24/3600:.2e}m/s, sy={sy*100:.2f}%, thick={thick:.1f}m")
+    # Model name
+    timestamp = datetime.now().strftime("%H%M%S") #permet d'afficher l'heure à laquelle le script à tourner
+    model_name = f"optim_{compt}_{timestamp}_sy{sy_value*100:.4f}%"
+    # logging.info(f"\nSimulation {compt}: hk={hk_value/24/3600:.2e}m/s, hk_decay={hk_decay_value:.3f}m")
     BV.settings.update_model_name(model_name)
     BV.settings.update_check_model(plot_cross=False, check_grid=True)
 
@@ -287,10 +392,10 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
                                 watertable_depth=True,
                                 groundwater_flux=False,
                                 groundwater_storage=False,
-                                intermittency_monthly=True,
+                                #intermittency_monthly=True,
                                 export_all_tif=False)
 
-    BV.postprocessing_timeseries(model_modflow, 
+    BV.postprocessing_timeseries(model_modflow=model_modflow, 
                                 model_modpath=None, 
                                 datetime_format=True)
 
@@ -327,9 +432,6 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
 
     observed_Q = []
 
-    print("Qobsmm index:", Qobsmm.index)
-    print("filtered_dates:", filtered_dates)
-
     for date in filtered_dates:
         print(f"Processing date: {date}")
         # adapte la variable a entrer en fonction de freq_input
@@ -359,11 +461,11 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
         Qmod = (Qmod + (r * 1000)) * 7
 
     print(f"Qmod : {Qmod}")
- 
+    
     if freq_input == 'D':
-        Qobs_stat = select_period(Qobsdaymm,first_year,last_year)
-        print(f"Qobs : {Qobsdaymm}")
-
+        Qobs_stat = select_period(Qobsmm,first_year,last_year)
+        print(f"Qobs : {Qobsmm}")
+        
     if freq_input == 'W':
         Qobs_stat = select_period(Qobsweekmm,first_year,last_year)
         print(f"Qobs : {Qobsweekmm}")
@@ -411,31 +513,24 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
 
     if np.isnan(error) :
         return np.inf  # Large error if indicator is invalid
+    
+    optimization_results["model_name"] = model_name
+    optimization_results["model_modflow"] = model_modflow
 
     current_simulation = {
-    "iteration": compt,
-    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "model_name": model_name,
-    "hk": hk,
-    "hk_ms": hk/24/3600,
-    "log_hk": log_hk,  # Ajout du log(hk) dans les résultats
-    "sy": sy,
-    "thick": thick,
-    f"{fct_calib}": crit,
-    "error_crit": error,
-
-    "filtered_points": len(filtered_dates),
-    "total_points": len(sim_dates),
+        "iteration": compt,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_name": model_name,
+        "sy": sy_value,
+        f"{fct_calib}": crit,
+        "error_crit": error
     }
-    
-    #all_Qmod_Qobs_results.append(Qmod_Qobs)
-    pd.DataFrame(all_Qmod_Qobs_results).to_csv(os.path.join(optim_folder,'all_Qmod_Qosb_results.csv'))
     
     # Append the results to the list
     all_simulations_results.append(current_simulation)
 
     pd.DataFrame(all_simulations_results).to_csv(
-        os.path.join(optim_folder, 'all_simulations_results.csv'), 
+        os.path.join(optim_folder, f'all_simulations_results_{fct_calib}.csv'), 
         index=False
     )
 
@@ -446,10 +541,7 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
         optimization_results["best_error"] = error
         optimization_results["best_crit"] = crit
         optimization_results["best_params"] = {
-            "hk": hk,
-            "log_hk": log_hk,  # Ajout du log(hk) dans les meilleurs paramètres
-            "sy": sy,
-            "thick": thick
+            "sy": sy_value
         }
         optimization_results["filtered_dates"] = filtered_dates
         optimization_results["Qobs"] = Qobs_stat
@@ -459,11 +551,11 @@ def erreur_modele_norm(params_norm:Tuple[float,float], compt:int, sy_min_max:Tup
     compt += 1
     return error
 
-def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x: float, y: float, dicharge_file: str,
+def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, departement:int, x: float, y: float, discharge_file: str,
                 out_path: str, data_path: str, safransurfex: str, transfo:List[str], fct_calib: str, crit_list: List[str], weights_list: List[float]) -> None:
     
     """
-    Effectue la calibration des paramètres du modèle HydroModPy
+    Effectue la calibration des paramètres du modèle HydroModPy en prenant en compte le réseau hydrographique du bassin versant
 
     Paramètres d'entrée :
     nom_bv : nom du bassin versant
@@ -482,26 +574,14 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     # Personnal parameters and paths
 
     study_site = nom_bv
-    first_year = first_year
-    last_year = last_year
-    freq_input = freq_input
-    x = x
-    y = y
-    discharge_file = dicharge_file
-
     years = [first_year, last_year]
     sim_state = 'transient' 
 
-    hk_init = 1.0e-5 * 3600 * 24 # m/day #* compris entre log_hk_min, log_hk_max = np.log10(1e-8*24*3600), np.log10(1e-2*24*3600)  # Log scale
-    sy_init = 1 / 100 # 0.1% #* compris entre sy_min, sy_max = 0.1/100, 10/100
-    out_path = out_path
-    data_path = data_path
     discharge_path = os.path.join(data_path, discharge_file)
-    specific_data_path = os.path.join(data_path, study_site)
 
-    print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
+    print(f"out_path; {out_path}, Data path: {data_path}")
 
-    watershed_name = '_'.join([study_site])
+    watershed_name = f"{study_site}_reseau"
 
     print('##### '+watershed_name.upper()+' #####')
 
@@ -541,21 +621,25 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     simulations_folder = os.path.join(out_path, watershed_name, 'results_simulations')
     calibration_folder = os.path.join(out_path, watershed_name, 'results_calibration')
 
-    #BV.add_hydrography(data_path, types_obs=['regional stream network'])
-    BV.add_hydrometry(data_path,'france hydrometric stations.shp')
+    # Clip specific data at the catchment scale
+    BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
+    specific_data_path = os.path.join(data_path, 'regional_stream_network', str(departement))
+    BV.add_hydrography(specific_data_path, types_obs=['regional stream network'])
+    BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
+    BV.add_intermittency(data_path, 'regional onde stations.shp')
+    # BV.add_piezometry()
     
     # Recharge et ruisselement de surface direct
 
     BV.add_climatic()
 
     # Reanalyse
-    BV.climatic.update_sim2_reanalysis(var_list=[ 'recharge', 'runoff',
-                                                  'precip',
-                                                  'evt', 'etp', 't', 
+    BV.climatic.update_sim2_reanalysis(var_list=[ 'recharge', 'runoff', 'precip',
+                                                  'evt', 'etp', 't', 'eff_rain'
                                                 ],
                                         nc_data_path=os.path.join(
                                             data_path,
-                                            f"Meteo\{watershed_name}\Historiques SIM2"),
+                                            f"Meteo\{study_site}\Historiques SIM2"),
                                         first_year=first_year,
                                         last_year=last_year,
                                         time_step=freq_input,
@@ -565,10 +649,10 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
                                         disk_clip='watershed') 
                                                                     
     # # # # Units
-    # BV.climatic.evt = BV.climatic.evt / 1000 # from mm to m
-    # BV.climatic.etp = BV.climatic.etp / 1000 # from mm to m
-    # BV.climatic.precip = BV.climatic.precip / 1000 # from mm to m
-    # BV.climatic.t = BV.climatic.t / 1000 # from mm to m
+    BV.climatic.evt = BV.climatic.evt / 1000 # from mm to m
+    BV.climatic.etp = BV.climatic.etp / 1000 # from mm to m
+    BV.climatic.precip = BV.climatic.precip / 1000 # from mm to m
+    BV.climatic.t = BV.climatic.t / 1000 # from mm to m
 
     # Besoin de le mettre à jour qu'une fois par an.
     BV.add_safransurfex(safransurfex)
@@ -612,7 +696,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
     # Qobs formatting and F normalisation
 
-    Qobs_path = os.path.join(discharge_path)
+    Qobs_path = discharge_path
     Qobs = pd.read_csv(Qobs_path, delimiter=',')
 
     # Split the values at 'T' for the 'Date(TU)' column and remove the values after 'T'
@@ -636,21 +720,19 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     Qobsweekmm = select_period(Qobsweekmm, first_year, last_year)
     Qobsmonthmm = Qobsmonth * 1000 # m/day to mm/month
     Qobsmonthmm = select_period(Qobsmonthmm, first_year, last_year)
-    Qobsday = Qobs.resample('D').sum()
-    Qobsdaymm = Qobsday * 1000 # m/day to mm/week
-    Qobsdaymm = select_period(Qobsdaymm, first_year, last_year)
 
     if freq_input == 'D':
-        Qobsmm = select_period(Qobsdaymm,first_year,last_year)
-        print(f"Qobs : {Qobsdaymm}")
-
+        Qobsmm = Qobs * 1000 # m/day to mm/day
+        Qobsmm = select_period(Qobsmm, first_year, last_year)
+        print(f"Qobsday : {Qobsmm}")
     if freq_input == 'W':
         Qobsmm = select_period(Qobsweekmm,first_year,last_year)
         print(f"Qobs : {Qobsweekmm}")
-                
+        Qobsmm = Qobsmm.resample('W').mean() # to calculate the mean value as the same shape as modflow input value
     if freq_input == 'M':
         Qobsmm = select_period(Qobsmonthmm,first_year,last_year)
         print(f"Qobs : {Qobsmonthmm}")
+        Qobsmm = Qobsmm.resample('M').mean() # to calculate the mean value as the same shape as modflow input value
 
     # Recharge and runoff resample by year and normalisation 
 
@@ -666,13 +748,282 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     surfacewater_annual = surfacewater.resample('Y').sum().mean()
     Qsafran = groundwater_annual+surfacewater_annual
     F = Qobsyear / Qsafran
+
     print (f'F = {F}')
     R = R * F
     r = r * F
-    
-    # Define
 
     # Frame settings
+    r_steady=r.mean()
+    R_steady=R.mean()
+    print(f"R mean: {R_steady}, r mean: {r_steady}")
+    print(f"R: {R}, r: {r}")
+
+    # Frame settings
+    box = True # or False
+    sink_fill = False # or True
+
+    sim_state_steady = 'steady'
+    plot_cross = False
+    dis_perlen = True
+
+    # Climatic settings
+    first_clim = 'mean' # or 'first or value
+    freq_time = freq_input
+
+    # Hydraulic settings
+    nlay = 1
+    lay_decay = 10 # 1 for no decay
+    bottom = None # elevation in meters, None for constant auifer thickness, or 2D matrix
+    thick = 30 # if bottom is None, aquifer thickness
+    hk = 1.0e-6* 3600 * 24
+    cond_drain = None # or value of conductance
+
+    sy = 1/100
+
+    # Boundary settings
+    bc_left = None # or value
+    bc_right = None # or value
+    sea_level = 'None' # or value based on specific data : BV.oceanic.MSL
+    split_temp = True
+
+    iD_set_simulations = 'explorSy_test1'
+
+    # Update
+
+    # Import modules
+    BV.add_settings()
+    BV.add_climatic()
+    BV.add_hydraulic()
+
+    # Frame settings
+    BV.settings.update_box_model(box)
+    BV.settings.update_sink_fill(sink_fill)
+    BV.settings.update_simulation_state(sim_state_steady)
+    BV.settings.update_check_model(plot_cross=plot_cross)
+
+    # Climatic settings
+    recharge = R.copy()
+    BV.climatic.update_recharge(recharge, sim_state=sim_state_steady)
+    BV.climatic.update_first_clim(first_clim)
+
+    runoff = r.copy()
+    BV.climatic.update_runoff(runoff, sim_state=sim_state_steady)
+    BV.climatic.update_first_clim(first_clim)
+
+    # Hydraulic settings
+    BV.hydraulic.update_nlay(nlay) # 1
+    BV.hydraulic.update_lay_decay(lay_decay) # 1
+    BV.hydraulic.update_bottom(bottom) # None
+    BV.hydraulic.update_thick(thick) # 30 / intervient pas si bottom != None
+    BV.hydraulic.update_hk(hk)
+    BV.hydraulic.update_sy(sy) # 0.1/100
+    BV.hydraulic.update_cond_drain(cond_drain)
+
+    # Boundary settings
+    BV.settings.update_bc_sides(bc_left, bc_right)
+    BV.add_oceanic(sea_level)
+    BV.settings.update_dis_perlen(dis_perlen)
+
+    # Particle tracking settings
+    BV.settings.update_input_particles(zone_partic=BV.geographic.watershed_box_buff_dem) # or 'seepage_path'
+
+    ### Calibration
+
+    run_optimization = True
+
+    if run_optimization:
+        optim_folder = os.path.join(calibration_folder, 'optimization_results')
+        os.makedirs(optim_folder, exist_ok=True)
+
+        all_simulations_results = []
+        use_time_filter = True
+        
+        calib_start_date = f"{first_year}-01-01"
+        calib_end_date = f"{last_year}-12-31"
+        
+        use_seasonal_filter = False # true = calib sur période suivante
+        season_start_month = 7
+        season_start_day = 1
+        season_end_month = 12
+        season_end_day = 31
+
+        use_filter = [use_time_filter, use_seasonal_filter]
+        calib_dates = [calib_start_date, calib_end_date]
+        season_start_end = [season_start_month, season_start_day, season_end_month, season_end_day]
+
+        optimization_results = {"model_name": None, "model_modflow": None, "best_error": np.inf}
+        
+        compt = 0
+
+        # Run the optimization
+        print("\n=== DÉMARRAGE DE L'OPTIMISATION SIMPLEX ===")
+        start_time = datetime.now()
+        print(f"Démarrage: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        if use_time_filter:
+            filter_info = f"Période de calibration: {calib_start_date} à {calib_end_date}"
+            if use_seasonal_filter:
+                filter_info += f", saison: {season_start_day}/{season_start_month} à {season_end_day}/{season_end_month}"
+            print(filter_info)
+
+        # Define the bounds for the parameters using log scale for hk
+        hk_min_mday, hk_max_mday = 1e-8 * 24 * 3600, 1e-2 * 24 * 3600  # m/day
+        log_hk_min = np.log10(hk_min_mday)  # log10 de la valeur en m/jour
+        log_hk_max = np.log10(hk_max_mday)  # log10 de la valeur en m/jour
+
+        loghk_min_max = [log_hk_min, log_hk_max]
+
+        # Initial values
+        hk_init = hk
+
+        # Convertir hk_init en log(hk_init) pour la normalisation
+        log_hk_init = np.log10(hk_init)
+
+        # Normalize the initial values with hk in log scale
+        x0_norm = [normalize(log_hk_init, log_hk_min, log_hk_max)]
+
+        # Log des bornes et valeurs initiales pour vérification
+        print(f"Valeur initiale hk: {hk_init:.2e} m/jour ({hk_init/24/3600:.2e} m/s), log(hk): {log_hk_init:.4f}")
+        print(f"Bornes hk: [{hk_min_mday:.2e}, {hk_max_mday:.2e}] m/jour, log(hk): [{log_hk_min:.4f}, {log_hk_max:.4f}]")
+        
+        # Run the optimization using the Nelder-Mead method (Simplex)
+        result = minimize(
+            erreur_modele_norm_hk, 
+            x0_norm, 
+            args = (compt, loghk_min_max, BV, thick, optimization_results, optim_folder, all_simulations_results),
+            method='Nelder-Mead',
+            options={
+                'xatol': 0.01,
+                'fatol': 0.01,
+                'maxiter': 30,
+                'disp': True
+            }
+        )
+        
+        # Conversion des résultats optimaux du log(hk) vers hk
+        best_log_hk = denormalize(result.x[0], log_hk_min, log_hk_max)
+        best_hk = 10**best_log_hk
+
+        end_time = datetime.now()
+        duration = end_time - start_time
+
+        print("\n=== RÉSULTATS DE L'OPTIMISATION ===")
+        print(f"Conductivité hydraulique optimale: {best_hk/24/3600:.2e} m/s ({best_hk:.2e} m/jour)")
+        print(f"Log(K) optimal: {best_log_hk:.4f}")
+        # print(f"Porosité efficace optimale: {best_sy:.4f}")
+        # print(f"Décroissance de la conductivité hydraulique optimale: {best_hk_decay:.3f} m")
+        # print(f"Épaisseur optimale: {best_thick:.2f} m")
+        # print(f"NSElog: {optimization_results.get('best_NSElog', 'N/A')}")
+        print(f"distance optimale : {optimization_results.get('matchingstream', 'N/A')} m")
+        # logging.info(f"NSE: {optimization_results.get('best_nse', 'N/A')}")
+        # logging.info(f"R²: {optimization_results.get('best_r_squared', 'N/A')}")
+        # logging.info(f"RMSE: {optimization_results.get('best_rmse', 'N/A')} m³")
+        print(f"Meilleur modèle: {optimization_results['model_name']}")
+        print(f"Nombre de simulations: {compt}")
+        print(f"Durée totale: {duration}")
+
+        # Use the best parameters for the final run
+        BV.hydraulic.update_hk(best_hk)
+        # BV.hydraulic.update_thick(best_thick)
+
+        # Update the model name with the best parameters
+        model_name = f"final_optimized_hk{best_hk/24/3600:.2e}"
+        BV.settings.update_model_name(model_name)
+
+        # Save the optimization results
+        optim_results = {
+            "best_hk": best_hk,
+            "best_hk_ms": best_hk/24/3600,
+            "best_log_hk": best_log_hk,  # Ajout du log(hk) dans les résultats
+            "iterations": compt,
+            "duration_seconds": duration.total_seconds(),
+            "optimization_start": start_time.strftime('%Y-%m-%d %H:%M:%S'),
+            "optimization_end": end_time.strftime('%Y-%m-%d %H:%M:%S'),
+            "best_model": optimization_results['model_name'],
+            "time_filter": {
+                "enabled": use_time_filter,
+                "global_start": calib_start_date,
+                "global_end": calib_end_date,
+                "seasonal_filter": use_seasonal_filter,
+                "season_start": f"{season_start_day}/{season_start_month}",
+                "season_end": f"{season_end_day}/{season_end_month}"
+            }
+        }
+
+        # Create optimization results folder if it doesn't exist
+        optim_df = pd.DataFrame([optim_results])
+        optim_df.to_csv(os.path.join(optim_folder, f'optimization_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'), index=False)
+
+        print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
+    else: 
+        print("Optimisation désactivée, utilisation des paramètres définis manuellement.")
+
+    # Run best model
+    BV.settings.update_model_name(model_name)
+    BV.settings.update_check_model(plot_cross=False, check_grid=True)
+
+    model_modflow = BV.preprocessing_modflow(for_calib=True)
+    success_modflow = BV.processing_modflow(model_modflow, write_model=True, run_model=True)
+
+    if not success_modflow:
+        print("Échec de la simulation!")
+
+    # Post-processing
+    BV.postprocessing_modflow(model_modflow,
+                                watertable_elevation=True,
+                                seepage_areas=True,
+                                outflow_drain=True,
+                                accumulation_flux=True,
+                                watertable_depth=True,
+                                groundwater_flux=False,
+                                groundwater_storage=False,
+                                #intermittency_yearly=True,
+                                export_all_tif=False)
+
+    fig, ax = plt.subplots(1, 1, figsize=(5,3), dpi=300)
+
+    stable_folder = os.path.join(out_path, watershed_name, 'results_stable') # necessary for plots
+    calibration_folder = os.path.join(out_path, watershed_name, 'results_calibration')
+
+    dem_data = imageio.imread(BV.geographic.watershed_box_buff_dem)
+    dem_data = np.ma.masked_where(dem_data < 0, dem_data)
+
+    contour = imageio.imread(BV.geographic.watershed_contour_tif)
+    contour = np.ma.masked_where(contour < 0, contour)
+
+    obs_river_data = imageio.imread(os.path.join(stable_folder, 'hydrography',
+                                                    'regional stream network.tif'))
+    obs_river_data = np.ma.masked_where(obs_river_data < 0, obs_river_data)
+
+    seep_river_data = imageio.imread(os.path.join(calibration_folder, model_name,
+                                                    r'_postprocess/_rasters/seepage_areas_t(0).tif'))
+    seep_river_data = np.ma.masked_where(seep_river_data <= 0, seep_river_data)
+
+    sim_river_data = imageio.imread(os.path.join(calibration_folder, model_name,
+                                                    r'_postprocess/_rasters/accumulation_flux_t(0).tif'))
+    sim_river_data = np.ma.masked_where(sim_river_data <= 0, sim_river_data)
+
+    im_dem = ax.imshow(dem_data, alpha=0.5, cmap='Greys')
+    im_cont = ax.imshow(contour, alpha=1, cmap=mpl.colors.ListedColormap('k'))
+    im_obs = ax.imshow(obs_river_data, alpha=1, cmap=mpl.colors.ListedColormap('navy'))
+    im_sim = ax.imshow(sim_river_data, cmap=mpl.colors.ListedColormap('red'), alpha=0.7)
+    im_seep = ax.imshow(seep_river_data, cmap=mpl.colors.ListedColormap('darkorange'), alpha=0.7)
+
+    ax.set_xlabel('X [pixels]')
+    ax.set_ylabel('Y [pixels]')
+
+    fig.tight_layout()
+
+    fig.savefig(os.path.join(calibration_folder, '_figures',
+                'MAP_'+model_name+'_'+str(compt)+'.png'),
+                bbox_inches='tight')
+
+
+    # Define SY
+
+    print(f"R mean: {R}, r mean: {r}")
+
     box = True # or False
     sink_fill = False # or True
 
@@ -681,7 +1032,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     dis_perlen = True
 
     # Climatic settings
-    first_clim = 'first' # or 'first or value
+    first_clim = 'mean' # or 'first or value
     freq_time = freq_input
 
     # Hydraulic settings
@@ -689,10 +1040,10 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     lay_decay = 10 # 1 for no decay
     bottom = None # elevation in meters, None for constant auifer thickness, or 2D matrix
     thick = 30 # if bottom is None, aquifer thickness
-    hk = hk_init
+    hk = best_hk # m/day 
     cond_drain = None # or value of conductance
 
-    sy = sy_init
+    sy = 1/100 # [-] 
 
     # Boundary settings
     bc_left = None # or value
@@ -700,9 +1051,8 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     sea_level = 'None' # or value based on specific data : BV.oceanic.MSL
     split_temp = True
 
-    # Update
+    iD_set_simulations = 'explorSy_test1'
 
-    # Import modules
     BV.add_settings()
     BV.add_climatic()
     BV.add_hydraulic()
@@ -728,6 +1078,8 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     BV.hydraulic.update_bottom(bottom) # None
     BV.hydraulic.update_thick(thick) # 30 / intervient pas si bottom != None
     BV.hydraulic.update_hk(hk)
+    # BV.hydraulic.update_hk_decay(hk_decay) # 0.003
+    BV.hydraulic.update_sy(sy) # 0.1/100
     BV.hydraulic.update_cond_drain(cond_drain)
 
     # Boundary settings
@@ -738,7 +1090,6 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
     # Particle tracking settings
     BV.settings.update_input_particles(zone_partic=BV.geographic.watershed_box_buff_dem) # or 'seepage_path'
 
-    ### Calibration
 
     run_optimization = True
 
@@ -747,33 +1098,22 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
         os.makedirs(optim_folder, exist_ok=True)
 
         all_simulations_results = []
-        all_Qmod_Qobs_results = []
         use_time_filter = True
         
         calib_start_date = f"{first_year}-01-01"
         calib_end_date = f"{last_year}-12-31"
         
-        use_seasonal_filter = False # true = calib sur période suivante
+        use_seasonal_filter = False
         season_start_month = 7
         season_start_day = 1
         season_end_month = 12
         season_end_day = 31
 
-        use_filter = [use_time_filter, use_seasonal_filter]
-        calib_dates = [calib_start_date, calib_end_date]
-        season_start_end = [season_start_month, season_start_day, season_end_month, season_end_day]
-
         optimization_results = {"model_name": None, "model_modflow": None, "best_error": np.inf}
-            
-        # Define bounds and normalization factors
-        log_hk_min, log_hk_max = np.log10(1e-8*24*3600), np.log10(1e-2*24*3600)  # Log scale
+
         sy_min, sy_max = 0.1/100, 10/100
         compt = 0
 
-        sy_min_max = [sy_min,sy_max]
-        loghk_min_max = [log_hk_min, log_hk_max]
-
-        # Run the optimization
         print("\n=== DÉMARRAGE DE L'OPTIMISATION SIMPLEX ===")
         start_time = datetime.now()
         print(f"Démarrage: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -784,35 +1124,23 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
                 filter_info += f", saison: {season_start_day}/{season_start_month} à {season_end_day}/{season_end_month}"
             print(filter_info)
 
-        # Define the bounds for the parameters using log scale for hk
-        hk_min_mday, hk_max_mday = 1e-8 * 24 * 3600, 1e-2 * 24 * 3600  # m/day
-        log_K_min = np.log10(hk_min_mday)  # log10 de la valeur en m/jour
-        log_K_max = np.log10(hk_max_mday)  # log10 de la valeur en m/jour
-
+        # Define the bounds for the parameters
+        sy_min, sy_max = 0.01/100, 10/100  # Porosity bounds  
+        sy_min_max = [sy_min, sy_max]  
+            
         # Initial values
-        log_hk_init = np.log10(hk)  # log10 de la valeur en m/jour
-        hk_init = hk
         sy_init = sy
 
-        # Convertir hk_init en log(hk_init) pour la normalisation
-        log_hk_init = np.log10(hk_init)
-
         # Normalize the initial values with hk in log scale
-        x0_norm = [
-            normalize(log_hk_init, log_hk_min, log_hk_max),
-            normalize(sy_init, sy_min, sy_max),
-        ]
-
-        # Log des bornes et valeurs initiales pour vérification
-        print(f"Valeur initiale hk: {hk_init:.2e} m/jour ({hk_init/24/3600:.2e} m/s), log(hk): {log_hk_init:.4f}")
-        print(f"Bornes hk: [{hk_min_mday:.2e}, {hk_max_mday:.2e}] m/jour, log(hk): [{log_K_min:.4f}, {log_K_max:.4f}]")
+        x0_norm = [normalize(sy_init, sy_min, sy_max)]
         
+        print(f"Bornes sy: [{sy_min:.4f}, {sy_max:.4f}] %")
         # Run the optimization using the Nelder-Mead method (Simplex)
         result = minimize(
-            erreur_modele_norm, 
+            erreur_modele_norm_sy, 
             x0_norm, 
-            args = (compt, sy_min_max, loghk_min_max, BV, thick, calibration_folder, use_filter, calib_dates, season_start_end,
-                    Qobsmm, freq_input, Qobsdaymm, Qobsweekmm, years, r, Qobsmonthmm, optimization_results, all_Qmod_Qobs_results, optim_folder, all_simulations_results,
+            args = (compt, sy_min_max, BV, calibration_folder, use_filter, calib_dates, season_start_end,
+                    Qobsmm, freq_input, Qobsweekmm, years, r, Qobsmonthmm, optimization_results, optim_folder, all_simulations_results,
                     transfo, fct_calib, crit_list, weights_list),
             method='Nelder-Mead',
             options={
@@ -822,34 +1150,30 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
                 'disp': True
             }
         )
-        
-        # Conversion des résultats optimaux du log(hk) vers hk
-        best_log_hk = denormalize(result.x[0], log_K_min, log_K_max)
-        best_hk = 10**best_log_hk
 
-        best_sy = denormalize(result.x[1], sy_min, sy_max)
-        # best_thick = denormalize(result.x[2], thick_min, thick_max)
+        best_sy = denormalize(result.x[0], sy_min, sy_max)
 
         end_time = datetime.now()
         duration = end_time - start_time
 
-        # Use the best parameters for the final run
-        BV.hydraulic.update_hk(best_hk)
-        BV.hydraulic.update_sy(best_sy)
-        # BV.hydraulic.update_thick(best_thick)
+        print("\n=== RÉSULTATS DE L'OPTIMISATION ===")
+        print(f"Conductivité hydraulique optimale: {best_hk/24/3600:.2e} m/s ({best_hk:.2e} m/jour)")
+        print(f"Porosité efficace optimale: {best_sy:.4f}")
+        print(f"crit: {optimization_results.get('best_crit', 'N/A')}")
+        print(f"distance optimale : {optimization_results.get('matchingstream', 'N/A')} m")
+        print(f"Meilleur modèle: {optimization_results['model_name']}")
+        print(f"Nombre de simulations: {compt}")
+        print(f"Durée totale: {duration}")
 
-        # Update the model name with the best parameters
-        model_name = f"final_optimized_hk{best_hk/24/3600:.2e}_sy{best_sy:.4f}_th{thick:.1f}"
+        BV.hydraulic.update_sy(best_sy)
+
+        model_name = f"final_optimized_sy{best_sy*100:.4f}%"
         BV.settings.update_model_name(model_name)
 
-        # Save the optimization results
         optim_results = {
-            "best_hk": best_hk,
-            "best_hk_ms": best_hk/24/3600,
-            "best_log_hk": best_log_hk,  # Ajout du log(hk) dans les résultats
             "best_sy": best_sy,
             "best crit": optimization_results.get('best_crit'),
-            "iterations": result.nfev,
+            "iterations": compt,
             "duration_seconds": duration.total_seconds(),
             "optimization_start": start_time.strftime('%Y-%m-%d %H:%M:%S'),
             "optimization_end": end_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -866,31 +1190,75 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
         # Create optimization results folder if it doesn't exist
         optim_df = pd.DataFrame([optim_results])
-        optim_df.to_csv(os.path.join(optim_folder, f'optimization_results.csv'), index=False)
-
-        # Qobs
-        s_obs = optimization_results['Qobs']
-        df_obs = s_obs.reset_index()
-        df_obs.columns = ['date', 'Qobs']
-        df_obs['date'] = pd.to_datetime(df_obs['date'])
-        df_obs.to_csv(
-            os.path.join(optim_folder, 'optimization_results_qobs.csv'),
-            index=False
-        )
-
-        # Qmod
-        s_obs = optimization_results['Qmod']
-        df_obs = s_obs.reset_index()
-        df_obs.columns = ['date', 'Qmod']
-        df_obs['date'] = pd.to_datetime(df_obs['date'])
-        df_obs.to_csv(
-            os.path.join(optim_folder, 'optimization_results_qmod.csv'),
-            index=False
-        )
+        optim_df.to_csv(os.path.join(optim_folder, f'optimization_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'), index=False)
 
         print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
     else: 
         print("Optimisation désactivée, utilisation des paramètres définis manuellement.")
+
+
+    BV.settings.update_model_name(model_name)
+    BV.settings.update_check_model(plot_cross=False, check_grid=True)
+
+    model_modflow = BV.preprocessing_modflow(for_calib=True)
+    success_modflow = BV.processing_modflow(model_modflow, write_model=True, run_model=True)
+
+    if not success_modflow:
+        print("Échec de la simulation!")
+
+    # Save the optimization results
+    optim_results = {
+        "best_hk": best_hk,
+        "best_hk_ms": best_hk/24/3600,
+        "best_log_hk": best_log_hk,  # Ajout du log(hk) dans les résultats
+        "best_sy": best_sy,
+        "best crit": optimization_results.get('best_crit'),
+        "optimization_start": start_time.strftime('%Y-%m-%d %H:%M:%S'),
+        "optimization_end": end_time.strftime('%Y-%m-%d %H:%M:%S'),
+        "best_model": optimization_results['model_name']
+    }
+
+    # Create optimization results folder if it doesn't exist
+    optim_df = pd.DataFrame([optim_results])
+    optim_df.to_csv(os.path.join(optim_folder, f'optimization_results.csv'), index=False)
+
+    # Qobs
+    s_obs = optimization_results['Qobs']
+    df_obs = s_obs.reset_index()
+    df_obs.columns = ['date', 'Qobs']
+    df_obs['date'] = pd.to_datetime(df_obs['date'])
+    df_obs.to_csv(
+        os.path.join(optim_folder, 'optimization_results_qobs.csv'),
+        index=False
+    )
+
+    # Qmod
+    s_obs = optimization_results['Qmod']
+    df_obs = s_obs.reset_index()
+    df_obs.columns = ['date', 'Qmod']
+    df_obs['date'] = pd.to_datetime(df_obs['date'])
+    df_obs.to_csv(
+        os.path.join(optim_folder, 'optimization_results_qmod.csv'),
+        index=False
+    )
+
+    print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
+
+    # Post-processing
+    BV.postprocessing_modflow(model_modflow,
+                                watertable_elevation=True,
+                                seepage_areas=True,
+                                outflow_drain=True,
+                                accumulation_flux=True,
+                                watertable_depth=True,
+                                groundwater_flux=False,
+                                groundwater_storage=False,
+                                #intermittency_yearly=True,
+                                export_all_tif=False)
+
+    BV.postprocessing_timeseries(model_modflow=model_modflow,
+                                    model_modpath=None, 
+                                    datetime_format=True)
 
 
     ### Formating Qobs Gauged station csv
@@ -929,7 +1297,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
 
     ax = a0
     if freq_input == 'D':
-        ax.plot(Qobsdaymm, color='k', lw=1, ls='-', zorder=0, label='observed')
+        ax.plot(Qobsmm, color='k', lw=1, ls='-', zorder=0, label='observed')
         ax.plot(Qmod, color='red', lw=1, label='modeled')
     if freq_input == 'W':
         ax.plot(Qobsweekmm, color='k', lw=1, ls='-', zorder=0, label='observed')
@@ -951,7 +1319,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, x
         label.set_rotation(45)
         
     if freq_input == 'D':
-        Qobs_stat = select_period(Qobsdaymm,first_year,last_year)
+        Qobs_stat = select_period(Qobsmm,first_year,last_year)
     if freq_input == 'W':
         Qobs_stat = select_period(Qobsweekmm,first_year,last_year)
     if freq_input == 'M':
@@ -1019,9 +1387,10 @@ if __name__ == "__main__":
     parser.add_argument("first_year", type=int)
     parser.add_argument("last_year",  type=int)
     parser.add_argument("freq_input")
+    parser.add_argument("departement",  type=int)
     parser.add_argument("x",           type=float)
     parser.add_argument("y",           type=float)
-    parser.add_argument("dicharge_file")
+    parser.add_argument("discharge_file")
     parser.add_argument("out_path")
     parser.add_argument("data_path")
     parser.add_argument("safransurfex")
@@ -1060,9 +1429,10 @@ if __name__ == "__main__":
         first_year   = args.first_year,
         last_year    = args.last_year,
         freq_input   = args.freq_input,
+        departement  = args.departement,
         x            = args.x,
         y            = args.y,
-        dicharge_file= args.dicharge_file,
+        discharge_file= args.discharge_file,
         out_path     = args.out_path,
         data_path    = args.data_path,
         safransurfex = args.safransurfex,

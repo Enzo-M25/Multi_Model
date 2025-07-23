@@ -124,7 +124,7 @@ def evalution_criteria(calib:str) -> Tuple[Callable, int] :
     return evaluation, type_err
 
 def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_path:str, data_path:str, x:float, y:float, safransurfex:str, dicharge_file:str,
-               hk_ms:float, sy:float, fct_calib:str, transfo:List[str], crit_list: List[str], weights_list: List[float]) -> None :
+               hk_ms:float, sy:float, fct_calib:str, type_model:str, transfo:List[str], crit_list: List[str], weights_list: List[float]) -> None :
 
     """
     Effectue une validation des paramètres du modèle
@@ -140,26 +140,19 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     dicharge_file : chemin du fichie csv contenant les données de débits observés
     hk_ms, sy : Paramètres optimaux du modèle retenus durant la phase de calibration
     fct_calib : nom du critère sur lequel on effectue la calibration (NSE, NSE-log, KGE, RMSE, Biais)
+    type_model : type de modèle utilisé (HydroModPy, HydroModPy_reseau)
     transfo : liste contenant les transformations appliquees aux debits (ie. "", "log", "inv")
     crit_list, weights_list : dans le cas où la calibration s'effectue sur plusieurs critères, ces listes contiennent le nom des critères et les poids associés
     """
 
     # PERSONAL PARAMETERS AND PATHS
     study_site = nom_bv
-    first_year = first_year
-    last_year = last_year
-    freq_input = freq_input
     sim_state = 'transient' 
-    parameters = "1.6e-5_2%"
-    out_path = out_path
-    data_path = data_path
     specific_data_path = os.path.join(data_path, study_site)
 
     print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
 
-    # OPTIONS
-    # Name of the study site
-    watershed_name = '_'.join([study_site])
+    watershed_name = f"{study_site}{type_model}"
 
     print('##### '+watershed_name.upper()+' #####')
 
@@ -188,46 +181,12 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
                                 save_object=save_object)
 
     # Paths generated automatically but necessary for plots
-    stable_folder = os.path.join(out_path, watershed_name, 'results_stable')
     simulations_folder = os.path.join(out_path, watershed_name, 'results_simulations')
 
-    # DATA
-
-    # visualization_watershed.watershed_local(dem_path, BV)
-
-    # Clip specific data at the catchment scale
-    # BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
-    #BV.add_hydrography(data_path, types_obs=['regional stream network']) 
     BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
-    # BV.add_intermittency(data_path, 'regional onde stations.shp')
-    # BV.add_piezometry()
-
-    #Extract some subbasin from data available above
-    # BV.add_subbasin(os.path.join(data_path, 'additional'), 150)
-
-    # # General plot of the study site
-    # visualization_watershed.watershed_geology(BV)
-    # visualization_watershed.watershed_dem(BV)
 
     # climatic settings
     BV.add_climatic()
-    first_year = first_year
-    last_year = last_year
-
-    # ##%%% Reanalyse
-    # BV.climatic.update_sim2_reanalysis(var_list=['recharge', 'runoff', 'precip',
-    #                                              'evt', 'etp', 't',
-    #                                               ],
-    #                                        nc_data_path=os.path.join(
-    #                                            specific_data_path,
-    #                                            r"Meteo\Historiques SIM2"),
-    #                                        first_year=first_year,
-    #                                        last_year=last_year,
-    #                                        time_step=freq_input,
-    #                                        sim_state=sim_state,
-    #                                        spatial_mean=True,
-    #                                        geographic=BV.geographic,
-    #                                        disk_clip='watershed') # for clipping the netcdf files saved on disk
 
     # SAFRAN
     BV.add_safransurfex(safransurfex)
@@ -241,9 +200,7 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
                                         time_step=freq_input,
                                         sim_state=sim_state)
 
-    # BV.climatic.recharge = BV.climatic.recharge * BV.climatic.recharge.index.day #meandaypermonth to mm/month
     BV.climatic.update_recharge(BV.climatic.recharge/1000, sim_state = sim_state) # from mm to m
-    # BV.climatic.update_recharge(BV.climatic.recharge.resample('M').sum(), sim_state = sim_state) # days to month
 
     # RUNOFF REANALYSIS
     BV.climatic.update_runoff_reanalysis(path_file=os.path.join(out_path, watershed_name, 'results_stable', 'climatic', '_RUN_D.csv'),
@@ -254,9 +211,7 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
                                         time_step=freq_input,
                                         sim_state=sim_state)
 
-    # BV.climatic.runoff = BV.climatic.runoff* BV.climatic.runoff.index.day #meandaypermonth to mm/month
     BV.climatic.update_runoff(BV.climatic.runoff / 1000, sim_state = sim_state) # from mm to m
-    # BV.climatic.update_runoff(BV.climatic.runoff.resample('M').sum(), sim_state = sim_state)
 
     #% R and r ASSIGNATION
     if isinstance(BV.climatic.recharge, float):
@@ -273,9 +228,6 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     # Qobs FORMATTING et F normalization 
     Qobs_path = os.path.join(data_path,dicharge_file)
     Qobs = pd.read_csv(Qobs_path, delimiter=',')
-    #print (Qobs.columns)
-    #print(Qobs.head())
-    # Split the values at 'T' for the 'Date(TU)' column and remove the values after 'T'
     Qobs["Date (TU)"] = Qobs["Date (TU)"].str.split('T').str[0]
     Qobs["Date (TU)"] = pd.to_datetime(Qobs["Date (TU)"], format='%Y-%m-%d')
     Qobs.set_index("Date (TU)", inplace=True)
@@ -322,7 +274,6 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     box = True # or False
     sink_fill = False # or True
 
-    # sim_state = 'transient' # 'steady' or 'transient'
     sim_state = sim_state # 'steady' or 'transient'
     plot_cross = False
     dis_perlen = True
@@ -346,12 +297,6 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     bc_right = None # or value
     sea_level = 'None' # or value based on specific data : BV.oceanic.MSL
     split_temp = True
-
-    # # Particle tracking settings
-    # zone_partic = 'domain' # or watershed
-
-    # plt.plot(hk/R)
-    # plt.yscale('log')
 
     iD_set_simulations = 'explorSy_test1'
 
@@ -483,14 +428,8 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
             Qmod = (Qmod + (r * 1000)) * 7
 
         print (f'valeur de Qmod : {Qmod}')
-        # Rmod = Smod['recharge'] 
-        # print (f'valeur de Rmod : {Rmod}')
         
-        yearsmaj = mdates.YearLocator(1)   # every year
         yearsmin = mdates.YearLocator(1)
-        # monthsmaj = mdates.MonthLocator(6)  # every month
-        # monthsmin = mdates.MonthLocator(3)
-        # months_fmt = mdates.DateFormatter('%m') #b = name of month ?
         years_fmt = mdates.DateFormatter('%Y')
 
         ax = a0
@@ -505,21 +444,13 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
         ax.set_ylabel('Q / A [mm/month]')
         ax.set_yscale('log')
         ax.set_ylim(0.0001, 1000)
-        # years_5 = mdates.YearLocator(5)  # every 5 years
-        # ax.xaxis.set_major_locator(years_5)
         ax.xaxis.set_minor_locator(yearsmin)
         ax.xaxis.set_major_formatter(years_fmt)
         ax.set_xlim(pd.to_datetime(f'{first_year}-01'), pd.to_datetime(f'{last_year}-12'))
-        # ax.set_xlim(pd.to_datetime(f'2023-01'), pd.to_datetime(f'2023-12'))
         ax.legend()
         ax.set_title(model_name.upper(), fontsize=10)
         for label in ax.get_xticklabels():
             label.set_rotation(45)
-        # axb = ax.twinx()
-        # axb.bar(Rmod.index, Rmod,color='blue', edgecolor='blue', lw=2.5)
-        # axb.set_ylim(0,999)
-        # axb.invert_yaxis()
-        # axb.set_yticklabels([0.1,200])
         if freq_input == 'D':
             Qobs_stat = select_period(Qobsdaymm,first_year,last_year)
         if freq_input == 'W':
@@ -622,8 +553,6 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
         ax.plot((0.01,1000),(0.01,1000), color='grey', zorder=-1)
         ax.set_xlim(0.1,1000)
         ax.set_ylim(0.1,1000)
-        # ax.set_xlim(0.1,300)
-        # ax.set_ylim(0.1,300)    
         ax.set_xlabel('$Q_{obs}$ / A [mm/month]', fontsize=12)
         ax.set_ylabel('$Q_{sim}$ / A [mm/month]', fontsize=12)
         fig.tight_layout()
@@ -652,6 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("hk", type=float)
     parser.add_argument("sy", type=float)
     parser.add_argument("fct_calib")
+    parser.add_argument("type_model")
 
 
     parser.add_argument(
@@ -696,7 +626,8 @@ if __name__ == "__main__":
         hk_ms        = args.hk,
         sy           = args.sy,
         fct_calib    = args.fct_calib,
+        type_model   = args.type_model,
         transfo      = args.transfo,
         crit_list    = crit_list,
-        weights_list = weights_list
+        weights_list = weights_list,
     )

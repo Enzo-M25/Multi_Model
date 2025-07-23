@@ -112,15 +112,15 @@ t_prev_end = parse_date("2021-12-31")
 
 def process_file(args):
 
-    nom, id, x, y = args
+    nom, id, x, y, departement = args
 
     proc = current_process().name
     pid  = os.getpid()
     print(f"[{proc} | PID {pid}] traite le bv {nom}")
 
     # Valeurs par défaut si jamais un critère n'est pas défini
-    crit_prev_RL = crit_prev_GR4J = crit_prev_HMP = None
-    best_RL = best_GR4J = best_HMP = "No"
+    crit_prev_RL = crit_prev_GR4J = crit_prev_HMP = crit_prev_HMP_reseau = None
+    best_RL = best_GR4J = best_HMP = best_HMP_reseau = "No"
 
     try :
     
@@ -132,6 +132,7 @@ def process_file(args):
             data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
             results_path= r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
             basin_name=nom,
+            departement=departement,
             x=x,
             y=y,
             dem_raster=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\regional dem.tif",
@@ -153,11 +154,15 @@ def process_file(args):
         model2.param_calib(bv)
         mac.add_model(model2)
         
-        
         model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
                             'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
         model3.param_calib(bv)
         mac.add_model(model3)
+
+        model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
+                        'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+        model4.param_calib_reseau(bv)
+        mac.add_model(model4)
 
         best = mac.comparaison_models(fct_calib) # best est une liste de model
 
@@ -181,6 +186,9 @@ def process_file(args):
             elif model.nom_model == "HydroModpy" :
                 best_HMP = "Yes"
                 crit_prev_HMP = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
+            elif model.nom_model == "HydroModpy_reseau" :
+                best_HMP_reseau = "Yes"
+                crit_prev_HMP_reseau = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
 
     except Exception as e:
         print(f"Erreur station {nom} : {e}")
@@ -207,14 +215,20 @@ def process_file(args):
         "calib_HMP"   : getattr(model3, "crit_calib", None),
         "valid_HMP"   : getattr(model3, "crit_valid", None),
         "prev_HMP"    : crit_prev_HMP,
+        "HMP_reseau_best": best_HMP_reseau,
+        "params_HMP_reseau": { "sy": getattr(model4, "sy", None),
+                               "hk": getattr(model4, "hk", None) },
+        "calib_HMP_reseau": getattr(model4, "crit_calib", None),
+        "valid_HMP_reseau": getattr(model4, "crit_valid", None),
+        "prev_HMP_reseau": crit_prev_HMP_reseau,
     }
     
 def main():
     
     df_ref = pd.read_csv("ref_stations_mini.csv", sep=";") #TODO
-    args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"]))
+    args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"], df_ref["Département"]))
 
-    n_procs = min(cpu_count(), 10)
+    n_procs = 8
     print(f"Démarrage du pool avec {n_procs} processus...")
 
     start = time.time()

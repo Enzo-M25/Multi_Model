@@ -66,7 +66,8 @@ def select_period(df, first, last):
     df = df[(df.index.year>=first) & (df.index.year<=last)]
     return df
 
-def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_path:str, data_path:str, x:float, y:float, safransurfex:str, discharge_file:str, hk_ms:float, sy:float) -> None :
+def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_path:str, data_path:str, x:float, y:float,
+              safransurfex:str, discharge_file:str, hk_ms:float, sy:float, type_model:str) -> None :
 
     """
     Effectue une prévision des débits en fonction des paramètres rentrés par l'utilisateur
@@ -81,22 +82,17 @@ def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pat
     safransurfex : chemin du dossier contenant les données REA
     discharge_file : chemin du fichie csv contenant les données de débits observés
     hk_ms, sy : Paramètres optimaux du modèle retenus durant la phase de calibration
+    type_model : Type de modèle à utiliser pour la prévision (HydroModPy ou HydroModPy_reseau)
     """
 
     # PERSONAL PARAMETERS AND PATHS
     study_site = nom_bv
-    first_year = first_year
-    last_year = last_year
-    freq_input = freq_input
     sim_state = 'transient' 
-    parameters = "1.6e-5_2%"
-    out_path = out_path
-    data_path = data_path
     specific_data_path = os.path.join(data_path, study_site)
 
     print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
 
-    watershed_name = '_'.join([study_site])
+    watershed_name = f"{study_site}{type_model}"
 
     print('##### '+watershed_name.upper()+' #####')
 
@@ -125,46 +121,14 @@ def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pat
                                 save_object=save_object)
 
     # Paths generated automatically but necessary for plots
-    stable_folder = os.path.join(out_path, watershed_name, 'results_stable')
     simulations_folder = os.path.join(out_path, watershed_name, 'results_simulations')
 
     # DATA
 
-    # visualization_watershed.watershed_local(dem_path, BV)
-
-    # Clip specific data at the catchment scale
-    # BV.add_geology(data_path, types_obs='GEO1M.shp', fields_obs='CODE_LEG')
-    #BV.add_hydrography(data_path, types_obs=['regional stream network']) 
     BV.add_hydrometry(data_path, 'france hydrometric stations.shp')
-    # BV.add_intermittency(data_path, 'regional onde stations.shp')
-    # BV.add_piezometry()
-
-    #Extract some subbasin from data available above
-    # BV.add_subbasin(os.path.join(data_path, 'additional'), 150)
-
-    # # General plot of the study site
-    # visualization_watershed.watershed_geology(BV)
-    # visualization_watershed.watershed_dem(BV)
 
     # climatic settings
     BV.add_climatic()
-    first_year = first_year
-    last_year = last_year
-
-    # ##%%% Reanalyse
-    # BV.climatic.update_sim2_reanalysis(var_list=['recharge', 'runoff', 'precip',
-    #                                              'evt', 'etp', 't',
-    #                                               ],
-    #                                        nc_data_path=os.path.join(
-    #                                            specific_data_path,
-    #                                            r"Meteo\Historiques SIM2"),
-    #                                        first_year=first_year,
-    #                                        last_year=last_year,
-    #                                        time_step=freq_input,
-    #                                        sim_state=sim_state,
-    #                                        spatial_mean=True,
-    #                                        geographic=BV.geographic,
-    #                                        disk_clip='watershed') # for clipping the netcdf files saved on disk
 
     # SAFRAN
     BV.add_safransurfex(safransurfex)
@@ -178,9 +142,7 @@ def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pat
                                         time_step=freq_input,
                                         sim_state=sim_state)
 
-    # BV.climatic.recharge = BV.climatic.recharge * BV.climatic.recharge.index.day #meandaypermonth to mm/month
     BV.climatic.update_recharge(BV.climatic.recharge/1000, sim_state = sim_state) # from mm to m
-    # BV.climatic.update_recharge(BV.climatic.recharge.resample('M').sum(), sim_state = sim_state) # days to month
 
     # RUNOFF REANALYSIS
     BV.climatic.update_runoff_reanalysis(path_file=os.path.join(out_path, watershed_name, 'results_stable', 'climatic', '_RUN_D.csv'),
@@ -191,9 +153,7 @@ def prevision(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pat
                                         time_step=freq_input,
                                         sim_state=sim_state)
 
-    # BV.climatic.runoff = BV.climatic.runoff* BV.climatic.runoff.index.day #meandaypermonth to mm/month
     BV.climatic.update_runoff(BV.climatic.runoff / 1000, sim_state = sim_state) # from mm to m
-    # BV.climatic.update_runoff(BV.climatic.runoff.resample('M').sum(), sim_state = sim_state)
 
     #% R and r ASSIGNATION
     if isinstance(BV.climatic.recharge, float):
@@ -432,6 +392,7 @@ if __name__ == "__main__":
     parser.add_argument("discharge_file")
     parser.add_argument("hk", type=float)
     parser.add_argument("sy", type=float)
+    parser.add_argument("type_model")
 
     args = parser.parse_args()
     
@@ -448,4 +409,5 @@ if __name__ == "__main__":
         discharge_file = args.discharge_file,
         hk_ms          = args.hk,
         sy             = args.sy,
+        type_model     = args.type_model
     )
