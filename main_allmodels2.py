@@ -1,3 +1,4 @@
+
   
 import pandas as pd
 import numpy as np
@@ -105,33 +106,6 @@ def parse_date(d:str) -> datetime :
     except ValueError:
         raise ValueError(f"Format invalide pour la date : {d} (attendu YYYY-MM-DD)")
 
-def empty_result_dict(nom, id):
-    return {
-        "nom": nom,
-        "station_id": id,
-        "RL_best": "No",
-        "alpha_RL": None,
-        "Vmax_RL": None,
-        "calib_RL": None,
-        "valid_RL": None,
-        "prev_RL": None,
-        "GR4J_best": "No",
-        "params_GR4J": None,
-        "calib_GR4J": None,
-        "valid_GR4J": None,
-        "prev_GR4J": None,
-        "HMP_best": "No",
-        "params_HMP": {"sy": None, "hk": None},
-        "calib_HMP": None,
-        "valid_HMP": None,
-        "prev_HMP": None,
-        "HMP_reseau_best": "No",
-        "params_HMP_reseau": {"sy": None, "hk": None},
-        "calib_HMP_reseau": None,
-        "valid_HMP_reseau": None,
-        "prev_HMP_reseau": None,
-    }
-
 dossier = STATIONS_DIR
 
 fct_calib = "crit_NSE"
@@ -165,13 +139,6 @@ def process_file(args):
     crit_prev_RL = crit_prev_GR4J = crit_prev_HMP = crit_prev_HMP_reseau = None
     best_RL = best_GR4J = best_HMP = best_HMP_reseau = "No"
 
-    crit_prev_RL2 = crit_prev_GR4J2 = crit_prev_HMP_reseau2 = None
-    best_RL2 = best_GR4J2 = best_HMP_reseau2 = "No"
-
-    # valeurs par défaut
-    res1 = empty_result_dict(nom, id)
-    res2 = empty_result_dict(nom, id)
-
     try :
     
         fichier = f"CAMELS_FR_tsd_{id}.csv"
@@ -194,31 +161,26 @@ def process_file(args):
         bv = Jauge(id, nom, dossier, fichier, watershed)
 
         mac = Choix()
-        mac2 = Choix()
         
-        model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-        model1.param_calib(bv)
-        mac.add_model(model1)
-        mac2.add_model(model1)
+        # model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+        # model1.param_calib(bv)
+        # mac.add_model(model1)
         
-        model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-        model2.param_calib(bv)
-        mac.add_model(model2)
-        mac2.add_model(model2)
+        # model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+        # model2.param_calib(bv)
+        # mac.add_model(model2)
         
-        model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
-                            HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
-        model3.param_calib(bv)
-        mac.add_model(model3)
+        # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+        #                     HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
+        # model3.param_calib(bv)
+        # mac.add_model(model3)
 
         model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
                             HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
         model4.param_calib_reseau(bv)
         mac.add_model(model4)
-        mac2.add_model(model4)
 
         best = mac.comparaison_models(fct_calib) # best est une liste de model
-        best2 = mac2.comparaison_models(fct_calib) # best2 est une liste de model 
 
         for model in best:
 
@@ -244,112 +206,65 @@ def process_file(args):
                 best_HMP_reseau = "Yes"
                 crit_prev_HMP_reseau = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
 
-        for model in best2:
-
-            d, Q_sim = model.prevision(bv)
-
-            if (len(Q_sim) == len(bv.serie_debit(t_prev_start,t_prev_end))) :
-                Q_obs = bv.serie_debit(t_prev_start,t_prev_end)
-            elif (len(Q_sim) == len(bv.serie_debit_mensuel(t_prev_start,t_prev_end))) :
-                Q_obs = bv.serie_debit_mensuel(t_prev_start,t_prev_end)
-            else :
-                raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
-
-            if model.nom_model == "RL" :
-                best_RL2 = "Yes"
-                crit_prev_RL2 = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
-            elif model.nom_model == "GR4J" :
-                best_GR4J2 = "Yes"
-                crit_prev_GR4J2 = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
-            elif model.nom_model == "HydroModpy_reseau" :
-                best_HMP_reseau2 = "Yes"
-                crit_prev_HMP_reseau2 = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
-
-        res1 = {
-            "nom"         : nom,
-            "station_id"  : id,
-            "RL_best"     : best_RL,
-            "alpha_RL"    : getattr(model1, "alpha", None),
-            "Vmax_RL"     : getattr(model1, "Vmax", None),
-            "calib_RL"    : getattr(model1, "crit_calib", None),
-            "valid_RL"    : getattr(model1, "crit_valid", None),
-            "prev_RL"     : crit_prev_RL,
-            "GR4J_best"   : best_GR4J,
-            "params_GR4J" : getattr(model2, "x", None),
-            "calib_GR4J"  : getattr(model2, "crit_calib", None),
-            "valid_GR4J"  : getattr(model2, "crit_valid", None),
-            "prev_GR4J"   : crit_prev_GR4J,
-            "HMP_best"    : best_HMP,
-            "params_HMP"  : { "sy": getattr(model3, "sy", None),
-                            "hk": getattr(model3, "hk", None) },
-            "calib_HMP"   : getattr(model3, "crit_calib", None),
-            "valid_HMP"   : getattr(model3, "crit_valid", None),
-            "prev_HMP"    : crit_prev_HMP,
-            "HMP_reseau_best": best_HMP_reseau,
-            "params_HMP_reseau": { "sy": getattr(model4, "sy", None),
-                                "hk": getattr(model4, "hk", None) },
-            "calib_HMP_reseau": getattr(model4, "crit_calib", None),
-            "valid_HMP_reseau": getattr(model4, "crit_valid", None),
-            "prev_HMP_reseau": crit_prev_HMP_reseau,
-        }
-        res2 = {
-            "nom"         : nom,
-            "station_id"  : id,
-            "RL_best"     : best_RL2,
-            "alpha_RL"    : getattr(model1, "alpha", None),
-            "Vmax_RL"     : getattr(model1, "Vmax", None),
-            "calib_RL"    : getattr(model1, "crit_calib", None),
-            "valid_RL"    : getattr(model1, "crit_valid", None),
-            "prev_RL"     : crit_prev_RL2,
-            "GR4J_best"   : best_GR4J2,
-            "params_GR4J" : getattr(model2, "x", None),
-            "calib_GR4J"  : getattr(model2, "crit_calib", None),
-            "valid_GR4J"  : getattr(model2, "crit_valid", None),
-            "prev_GR4J"   : crit_prev_GR4J2,
-            "HMP_reseau_best": best_HMP_reseau2,
-            "params_HMP_reseau": { "sy": getattr(model4, "sy", None),
-                                "hk": getattr(model4, "hk", None) },
-            "calib_HMP_reseau": getattr(model4, "crit_calib", None),
-            "valid_HMP_reseau": getattr(model4, "crit_valid", None),
-            "prev_HMP_reseau": crit_prev_HMP_reseau2,
-        }
-
     except Exception as e:
         print(f"Erreur station {nom} : {e}")
 
-    print(f"[{proc} | PID {pid}] a fini de traiter le bv {nom}")
+    print(f"[PID {pid}] a fini {nom}")
 
-    return res1, res2
+    return {
+        "nom"         : nom,
+        "station_id"  : id,
+        # "RL_best"     : best_RL,
+        # "alpha_RL"    : getattr(model1, "alpha", None),
+        # "Vmax_RL"     : getattr(model1, "Vmax", None),
+        # "calib_RL"    : getattr(model1, "crit_calib", None),
+        # "valid_RL"    : getattr(model1, "crit_valid", None),
+        # "prev_RL"     : crit_prev_RL,
+        # "GR4J_best"   : best_GR4J,
+        # "params_GR4J" : getattr(model2, "x", None),
+        # "calib_GR4J"  : getattr(model2, "crit_calib", None),
+        # "valid_GR4J"  : getattr(model2, "crit_valid", None),
+        # "prev_GR4J"   : crit_prev_GR4J,
+        # "HMP_best"    : best_HMP,
+        # "params_HMP"  : { "sy": getattr(model3, "sy", None),
+        #                   "hk": getattr(model3, "hk", None) },
+        # "calib_HMP"   : getattr(model3, "crit_calib", None),
+        # "valid_HMP"   : getattr(model3, "crit_valid", None),
+        # "prev_HMP"    : crit_prev_HMP,
+        "HMP_reseau_best": best_HMP_reseau,
+        "params_HMP_reseau": { "sy": getattr(model4, "sy", None),
+                               "hk": getattr(model4, "hk", None) },
+        "calib_HMP_reseau": getattr(model4, "crit_calib", None),
+        "valid_HMP_reseau": getattr(model4, "crit_valid", None),
+        "prev_HMP_reseau": crit_prev_HMP_reseau,
+    }
     
 def main():
 
-    df_ref = pd.read_csv("ref_stations.csv", sep=";")
+    num = 5
+
+    df_ref = pd.read_csv(f"ref{num}.csv", sep=";")
     args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"], df_ref["Département"]))
 
-    n_procs = 8
-    print(f"Démarrage du pool avec {n_procs} processus...")
-
+    print(f"Démarrage séquentiel pour {len(args_list)} stations...")
     start = time.time()
-    with Pool(n_procs) as pool:
-        results = pool.map(process_file, args_list)  # results est une liste de tuples (res1, res2)
+
+    rows = []
+    for args in args_list:
+        result = process_file(args)
+        if result is not None:
+            rows.append(result)
+
     elapsed = time.time() - start
-
-    # unzip
-    rows1 = [r[0] for r in results]
-    rows2 = [r[1] for r in results]
-
-    # Création du DataFrame et export
+    df_res = pd.DataFrame(rows)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    path_avec = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_avecHMP.csv")
-    pd.DataFrame(rows1).to_csv(path_avec, index=False)
-    pd.DataFrame([{"elapsed_time_s": elapsed}]).to_csv(path_avec, mode="a", header=False, index=False)
+    summary_path = os.path.join(script_dir, f"Seq_mod_calibration_{num}_{fct_calib}_{transfo}.csv")
+    df_res.to_csv(summary_path, index=False)
+    pd.DataFrame([{"elapsed_time_s": elapsed}]).to_csv(summary_path, mode="a", header=False, index=False)
 
-    path_sans = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_sansHMP.csv")
-    pd.DataFrame(rows2).to_csv(path_sans, index=False)
-
-    print(f"Résumé des calibrations pour {fct_calib} et transfo {transfo} écrit dans {path_avec} et {path_sans}")
-    print(f"⏱️ Temps parallèle : {elapsed:.2f}s")
+    print(f"Résumé écrit dans {summary_path}")
+    print(f"⏱️ Temps séquentiel : {elapsed:.2f}s")
 
 if __name__ == "__main__":
     

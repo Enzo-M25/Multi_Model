@@ -3,6 +3,9 @@ import subprocess
 import os
 import sys
 
+from pathlib import Path
+from typing import Optional
+
 class Pre_Process:
     """
     Utilise la classe Watershed de HydroModPy pour afficher des informations sur le bassin versant choisi
@@ -27,7 +30,13 @@ class Pre_Process:
                  departement:int, x: float, y: float, dem_raster: str, hydrometry_csv: str,
                  year_start: int, year_end: int, example_year: int,
                  env_root: str = r"C:\ProgramData\anaconda3\envs\hydromodpy-0.1"
-                ) :
+                ) :        
+                
+        # Validation des années
+        if year_start >= year_end:
+            raise ValueError("L'année de début doit être inférieure à l'année de fin")
+        if not (year_start <= example_year <= year_end):
+            raise ValueError("L'année d'exemple doit être comprise entre l'année de début et de fin")
         
         # Données membres
         self.example_path = example_path
@@ -47,7 +56,7 @@ class Pre_Process:
         self.env_root = env_root
         self.python_exe = os.path.join(env_root, "python.exe")
         
-    def pre_processing(self):
+    def pre_processing(self) -> None :
         """
         Affiche des données informelles (géologie, situation géographique, réseau hydrographique, moyenne des débits sur x années, obsevations des étiages) sur le bassin versant
         à partir de fonctions HydroModPy situées dans les dossier de l'utilisateur
@@ -93,7 +102,8 @@ class Pre_Process:
         )
         
         if result.returncode != 0:
-            print("Erreur d'exécution :", file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
+            error_msg = f"Erreur d'exécution : {result.stderr}"
+            print(error_msg, file=sys.stderr)
+            raise RuntimeError(error_msg)
         # else:
         #     print(result.stdout)

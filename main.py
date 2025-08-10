@@ -2,6 +2,16 @@
 import pandas as pd
 import numpy as np
 
+from config import (
+    HYDROMODPY_FUNCTIONS,
+    DATA_DIR,
+    METEO_DIR,
+    RESULTS_DIR,
+    DEM_FILE,
+    STATIONS_DIR,
+    WATERSHED_CONFIG
+)
+
 from Critereprev import Critereprev
 from Jauge import Jauge
 from Model_folder import Model
@@ -95,35 +105,91 @@ def parse_date(d:str) -> datetime :
     except ValueError:
         raise ValueError(f"Format invalide pour la date : {d} (attendu YYYY-MM-DD)")
 
+def generate_plots(model: Model, bv: Jauge, nom: str, id: str, t_prev_start: datetime, 
+                  t_prev_end: datetime) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Génère les graphiques de prévision pour un modèle donné
+    
+    Paramètres d'entrée:
+    model: Le modèle utilisé pour la prévision
+    bv: L'objet Jauge représentant le bassin versant
+    nom: Nom du bassin versant
+    id: Identifiant du bassin versant
+    t_prev_start: Date de début de prévision
+    t_prev_end: Date de fin de prévision
+    
+    Paramètres de sortie :
+    Q_obs, Q_sim: Les débits observés et simulés
+    """
+    # Création du répertoire pour les figures
+    main_dir = os.path.dirname(os.path.abspath(__file__))
+    figures_dir = os.path.join(main_dir, f"figures_{nom}_{t_prev_start.year}_{t_prev_end.year}")
+    os.makedirs(figures_dir, exist_ok=True)
+
+    print(f"Prévision avec le modèle {model.nom_model} :\n")
+
+    # Calcul de la prévision
+    d, Q_sim = model.prevision(bv)
+
+    # Vérification de la compatibilité des tailles
+    if not (len(d) == len(Q_sim)):
+        raise ValueError(
+            f"Incompatibilité des tailles : dates ({len(d)}), Q_sim ({len(Q_sim)})"
+        )
+
+    # Affichage seul de la prévision
+    result = Outputs(id, nom, figures_dir, d, Q_sim)
+    result.affiche()
+
+    # Récupération des débits observés
+    if len(Q_sim) == len(bv.serie_debit(t_prev_start, t_prev_end)):
+        Q_obs = bv.serie_debit(t_prev_start, t_prev_end)
+    elif len(Q_sim) == len(bv.serie_debit_mensuel(t_prev_start, t_prev_end)):
+        Q_obs = bv.serie_debit_mensuel(t_prev_start, t_prev_end)
+    else:
+        raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
+
+    # Vérification de la compatibilité des tailles
+    if not (len(d) == len(Q_sim) == len(Q_obs)):
+        raise ValueError(
+            f"Incompatibilité des tailles : dates ({len(d)}), Q_sim ({len(Q_sim)}), Q_obs ({len(Q_obs)})"
+        )
+    
+    # Affichage comparatif
+    result_compar = Outputs(id, nom, figures_dir, d, Q_sim, Q_obs)
+    result_compar.affiche()
+    result_compar.affiche_nuage()
+
+    return Q_obs, Q_sim
+
 def main():
     
-    nom = "Goyen" ##########
-    id = "J401401001" #########
-    x = 143849 #########
-    y = 6797335 #########
-    num_dep = 29
+    nom = WATERSHED_CONFIG["nom"]
+    id = WATERSHED_CONFIG["id"]
+    x = WATERSHED_CONFIG["x"]
+    y = WATERSHED_CONFIG["y"]
+    num_dep = WATERSHED_CONFIG["num_dep"]
 
     # Initialisation des jeux de données
 
-    dossier = "C:\\Users\\enzma\\Documents\\rennes 1\\M2\\Semestre 2\\Stage\\codes_matlab_resev_lin\\stations"
     fichier = f"CAMELS_FR_tsd_{id}.csv"
 
     watershed = Pre_Process(
-        example_path=r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-        data_path=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data",
-        results_path= r"C:\Users\enzma\Documents\HydroModPy\Enzo\results",
+        example_path=HYDROMODPY_FUNCTIONS,
+        data_path=DATA_DIR,
+        results_path=RESULTS_DIR,
         basin_name=nom,
         departement=num_dep,
         x=x,
         y=y, 
-        dem_raster=r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\regional dem.tif",
-        hydrometry_csv= f"{id}_QmnJ(n=1_non-glissant).csv",
+        dem_raster=DEM_FILE,
+        hydrometry_csv=f"{id}_QmnJ(n=1_non-glissant).csv",
         year_start=2000,
         year_end=2020,
         example_year=2010
     )
 
-    bv = Jauge(id, nom, dossier, fichier, watershed)
+    bv = Jauge(id, nom, STATIONS_DIR, fichier, watershed)
 
     # watershed.pre_processing()
 
@@ -132,7 +198,7 @@ def main():
     fct_calib = "crit_NSE"
 
     transfo = ["log"]
-    dict_crit = {"crit_KGE": 0.5, "crit_NSE": 0.5}
+    dict_crit = None #{"crit_KGE": 0.5, "crit_NSE": 0.5}
 
     t_calib_start = parse_date("2005-01-01") 
     t_calib_end = parse_date("2010-12-31")
@@ -149,48 +215,50 @@ def main():
 
     # Réservoir linéaire
     
-    # model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-    # model1.param_calib(bv)
-    # print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"  Alpha      : {model1.alpha}")
-    # print(f"  Vmax       : {model1.Vmax}")
-    # print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
-    # print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
-    # print("===============================\n")
-    # mac.add_model(model1)
+    model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+    model1.param_calib(bv)
+    print("\n=== Résultats du modèle de Résevoir linéaire (RL) ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"  Alpha      : {model1.alpha}")
+    print(f"  Vmax       : {model1.Vmax}")
+    print(f"  {fct_calib} Calib  : {model1.crit_calib:.4f}")
+    print(f"  {fct_calib} Valid  : {model1.crit_valid:.4f}")
+    print("===============================\n")
+    mac.add_model(model1)
 
     ### GR4J
 
-    # model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
-    # model2.param_calib(bv)
-    # print("\n=== Résultats du modèle GR4J ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"{fct_calib} calibration : {model2.crit_calib:.4f}")
-    # print(f"{fct_calib} validation : {model2.crit_valid:.4f}")
-    # print("Paramètres calibrés :")
-    # for i, val in enumerate(model2.x, start=1):
-    #     print(f"  X{i} : {val}")
-    # print("===============================\n")
-    # mac.add_model(model2)
+    model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
+    model2.param_calib(bv)
+    print("\n=== Résultats du modèle GR4J ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"{fct_calib} calibration : {model2.crit_calib:.4f}")
+    print(f"{fct_calib} validation : {model2.crit_valid:.4f}")
+    print("Paramètres calibrés :")
+    for i, val in enumerate(model2.x, start=1):
+        print(f"  X{i} : {val}")
+    print("===============================\n")
+    mac.add_model(model2)
     
     ### HYDROMODPY
 
-    # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-    #                     'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
-    # model3.param_calib(bv)
-    # print("\n=== Résultats du modèle HydroModPy ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    # print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
-    # print("Paramètres calibrés :")
-    # print(f"  Sy      : {model3.sy}")
-    # print(f"  hk(m/s) : {model3.hk}")
-    # print("===============================\n")
-    # mac.add_model(model3)
+    model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+                          HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
+    model3.param_calib(bv)
+    print("\n=== Résultats du modèle HydroModPy ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
+    print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
+    print("Paramètres calibrés :")
+    print(f"  Sy      : {model3.sy}")
+    print(f"  hk(m/s) : {model3.hk}")
+    print("===============================\n")
+    mac.add_model(model3)
 
-    model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib, r"C:\Users\enzma\Documents\Tests_Modeles\Test_Multi_Modeles - Copie\Multi_model\HydroModPy_functions",
-                        'M', r"C:\Users\enzma\Documents\HydroModPy\Enzo\data\Meteo\REA", dict_crit=None)
+    ### HYDROMODPY avec calibration sur le réseau hydro
+
+    model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+                        HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
     model4.param_calib_reseau(bv)
     print("\n=== Résultats du modèle HydroModPy avec calibration du réseau hydro ===")
     print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
@@ -202,42 +270,18 @@ def main():
     print("===============================\n")
     mac.add_model(model4)
 
-    try :
-        best = mac.comparaison_models(fct_calib) # best est une liste de model
-
+    try:
+        best = mac.comparaison_models(fct_calib)
+        
         for i, model in enumerate(best):
+            # Génération des graphiques et récupération des débits
+            Q_obs, Q_sim = generate_plots(model, bv, nom, id, t_prev_start, t_prev_end)
+            
+            # Calcul et affichage du critère de prévision
+            crit = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
+            print(f'{fct_calib} : {crit}')
 
-            main_dir = os.path.dirname(os.path.abspath(__file__))
-            figures_dir = os.path.join(main_dir, f"figures_{nom}_{t_prev_start.year}_{t_prev_end.year}")
-            os.makedirs(figures_dir, exist_ok=True)
-
-            print(f"Prévision num {i+1} avec le modèle {model.nom_model} :\n")
-
-            d, Q_sim = model.prevision(bv)
-
-            # Affichage seul de la prévision
-
-            result = Outputs(id,nom,figures_dir,d,Q_sim)
-            result.affiche()
-
-            if (len(Q_sim) == len(bv.serie_debit(t_prev_start,t_prev_end))) :
-                Q_obs = bv.serie_debit(t_prev_start,t_prev_end)
-            elif (len(Q_sim) == len(bv.serie_debit_mensuel(t_prev_start,t_prev_end))) :
-                Q_obs = bv.serie_debit_mensuel(t_prev_start,t_prev_end)
-            else :
-                raise ValueError("Impossible d'afficher une comparaison simulé / observé. Pas assez de mesures de débits observées.")
-
-            # Affichage de la prévision et des débits observés
-
-            result_compar = Outputs(id,nom,figures_dir,d,Q_sim,Q_obs)
-            result_compar.affiche()
-            result_compar.affiche_nuage()
-
-            # Critère de prévision
-
-            print(f'{fct_calib} : {critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)}')
-
-    except ValueError as e :
+    except ValueError as e:
         print(f"Erreur lors de la sélection du modèle : {e}")
     
 if __name__ == "__main__":

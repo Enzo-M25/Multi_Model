@@ -145,15 +145,13 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     crit_list, weights_list : dans le cas où la calibration s'effectue sur plusieurs critères, ces listes contiennent le nom des critères et les poids associés
     """
 
-    # PERSONAL PARAMETERS AND PATHS
+    # PERSONAL PARAMETERS AND PATHS 
     study_site = nom_bv
     sim_state = 'transient' 
-    specific_data_path = os.path.join(data_path, study_site)
 
-    print(f"out_path; {out_path}, Data path: {data_path}, specific_data_folder; {specific_data_path}")
+    print(f"out_path; {out_path}, Data path: {data_path}")
 
     watershed_name = f"{study_site}{type_model}"
-
     print('##### '+watershed_name.upper()+' #####')
 
     watershed_path = os.path.join(out_path, watershed_name)
@@ -264,7 +262,7 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
     surfacewater_annual = surfacewater.resample('Y').sum().mean()
     Qsafran = groundwater_annual+surfacewater_annual
     F = Qobsyear / Qsafran
-    print (f'F = {F}')
+    print(f'Facteur de normalisation F = {F}')
     R = R * F
     r = r * F
 
@@ -427,7 +425,7 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
         elif freq_input == 'W' :
             Qmod = (Qmod + (r * 1000)) * 7
 
-        print (f'valeur de Qmod : {Qmod}')
+        print(f'Valeurs de Qmod - Min: {Qmod.min():.4f}, Max: {Qmod.max():.4f}, Moyenne: {Qmod.mean():.4f}')
         
         yearsmin = mdates.YearLocator(1)
         years_fmt = mdates.DateFormatter('%Y')
@@ -460,6 +458,8 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
             
         Qmod_stat = select_period(Qmod,first_year,last_year)
 
+        print (f'valeur de Qmod : {Qmod_stat}')
+        print (f'valeur de Qobs : {Qobs_stat}')
 
         crit_valid = 0
 
@@ -514,7 +514,6 @@ def validation(nom_bv:str, first_year:int, last_year:int, freq_input:str, out_pa
             os.path.join(valid_folder, 'validation_qmod.csv'),
             index=False
         )
-
         
         NSE = he.evaluator(he.nse, Qmod_stat, Qobs_stat)[0]
         NSElog = he.evaluator(he.nse, Qmod_stat, Qobs_stat, transform='log')[0]

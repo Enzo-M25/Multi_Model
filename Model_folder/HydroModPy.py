@@ -2,15 +2,36 @@
 import subprocess
 import os
 import sys
+import shutil
 import numpy as np
 import pandas as pd
+
 from typing import Optional
+from pathlib import Path
 
 from Jauge import Jauge
 from .Model import Model
 from Pre_process import Pre_Process
 
-# https://pypi.org/project/hydroeval/
+def remove_optim_dirs(base_path: str, prefix: str) -> None:
+        """
+        Supprime tous les dossiers commençant par `prefix` dans le dossier `base_path`
+
+        Paramètres d'entrée :
+        base_path: Chemin du dossier dans lequel chercher
+        prefix: Préfixe des dossiers à supprimer
+        """
+        base = Path(base_path)
+        if not base.is_dir():
+            raise NotADirectoryError(f"Le chemin spécifié n'est pas un dossier valide : {base_path}")
+
+        # Parcours direct des sous-dossiers
+        for child in base.iterdir():
+            if child.is_dir() and child.name.startswith(prefix):
+                try:
+                    shutil.rmtree(child)
+                except Exception as e:
+                    print(f"Erreur lors de la suppression de {child} : {e}")
 
 class HydroModPy(Model):
     """
@@ -76,6 +97,9 @@ class HydroModPy(Model):
         self.sy = optim_results["best_sy"].iloc[0]
         self.hk = optim_results["best_hk_ms"].iloc[0]
 
+        calibration_path = f"{bv.watershed.basin_name}\\results_calibration"
+        remove_optim_dirs(os.path.join(bv.watershed.results_path, calibration_path), "optim_0")
+
         try :
             self.validation(bv)
         except ValueError as e :
@@ -94,7 +118,7 @@ class HydroModPy(Model):
         bv : Bassin versant jauge sur lequel on effectue la calibration
         """
 
-        #print("début calibration HydroModPy")
+        # print("début calibration HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -145,7 +169,7 @@ class HydroModPy(Model):
         # else:
         #     print(result.stdout)
 
-        #print("fin calibration HydroModPy")
+        # print("fin calibration HydroModPy")
 
     def validation(self, bv:Jauge) -> None:
         """
@@ -155,12 +179,12 @@ class HydroModPy(Model):
         bv : Bassin versant jauge sur lequel on effectue l'estimation
         """
 
-        if self.nom_model == HydroModPy :
+        if self.nom_model == "HydroModpy" :
             type_model = ""
         elif self.nom_model == "HydroModpy_reseau" :
             type_model = "_reseau"
 
-        print("début validation HydroModPy")
+        # print("début validation HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -211,10 +235,10 @@ class HydroModPy(Model):
         if result.returncode != 0:
             print("Erreur d'exécution :", file=sys.stderr)
             print(result.stderr, file=sys.stderr)
-        else:
-            print(result.stdout)
+        # else:
+        #     print(result.stdout)
 
-        print("fin validation HydroModPy")
+        # print("fin validation HydroModPy")
 
     def prevision(self, bv:Jauge) -> tuple[pd.Series, np.ndarray]:
         """
@@ -228,12 +252,12 @@ class HydroModPy(Model):
         Q_sim : Vecteur des débits simulés pendant la période d sous forme de panda Series
         """
 
-        if self.nom_model == HydroModPy :
+        if self.nom_model == "HydroModpy" :
             type_model = ""
         elif self.nom_model == "HydroModpy_reseau" :
             type_model = "_reseau"
 
-        print("début prévision HydroModPy")
+        # print("début prévision HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -278,12 +302,12 @@ class HydroModPy(Model):
         if result.returncode != 0:
             print("Erreur d'exécution :", file=sys.stderr)
             print(result.stderr, file=sys.stderr)
-        else:
-            print(result.stdout)
+        # else:
+        #     print(result.stdout)
 
-        print("fin prévision HydroModPy")
+        # print("fin prévision HydroModPy")
 
-        prevision_results = f"{bv.watershed.basin_name}\\results_prevision\\prevision_qmod.csv"
+        prevision_results = f"{bv.watershed.basin_name}{type_model}\\results_prevision\\prevision_qmod.csv"
         valid_results = pd.read_csv(os.path.join(bv.watershed.results_path, prevision_results))
 
         valid_results["date"] = pd.to_datetime(valid_results["date"])
@@ -321,6 +345,9 @@ class HydroModPy(Model):
         self.sy = optim_results["best_sy"].iloc[0]
         self.hk = optim_results["best_hk_ms"].iloc[0]
 
+        calibration_path = f"{bv.watershed.basin_name}_reseau\\results_calibration"
+        remove_optim_dirs(os.path.join(bv.watershed.results_path, calibration_path), "optim_0")
+
         try :
             self.validation(bv)
         except ValueError as e :
@@ -340,7 +367,7 @@ class HydroModPy(Model):
         bv : Bassin versant jauge sur lequel on effectue la calibration
         """
         
-        print("début calibration HydroModPy")
+        # print("début calibration HydroModPy")
         
         # donnees necessaire pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
@@ -389,7 +416,7 @@ class HydroModPy(Model):
         if result.returncode != 0:
             print("Erreur d'exécution :", file=sys.stderr)
             print(result.stderr, file=sys.stderr)
-        else:
-            print(result.stdout)
+        # else:
+        #     print(result.stdout)
 
-        print("fin calibration HydroModPy")
+        # print("fin calibration HydroModPy")

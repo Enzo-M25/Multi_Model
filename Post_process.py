@@ -13,9 +13,9 @@ class Outputs :
     Attributs :
     id (str) : identifiant du bassin versant
     name (str) : nom du bassin versant
-    Q_pred (np.ndarray) : débits simulés pendant la période date sous forme de panda Series
-    Q_obs (np.ndarray) : débits observés pendant la période date sous forme de panda Series (optionnel si la prediction est realisee a une date future)
-    dates (pd.Series) : periode de prediction / estimation des debits
+    Q_pred (np.ndarray) : débits simulés pendant la période date
+    Q_obs (np.ndarray) : débits observés pendant la période date (optionnel si la prediction est realisee a une date future)
+    dates (pd.DatetimeIndex) : periode de prediction / estimation des debits
     """
 
     def __init__(self, id: str, name: str, figures_dir:str, date:pd.Series, Q_pred:np.ndarray, Q_obs:Optional[np.ndarray] = None) :
@@ -59,13 +59,11 @@ class Outputs :
         DatetimeIndex pandas correspondant
         """
         try:
-            # pandas comprend nativement l’ISO 8601, y compris les nanosecondes
-            return pd.to_datetime(
-                date_series,
-                errors='coerce'    # remplace les valeurs invalides par NaT
-            )
+            if isinstance(date_series.index, pd.DatetimeIndex):
+                return date_series.index
+            return pd.DatetimeIndex(pd.to_datetime(date_series))
         except Exception as e:
-            raise ValueError(f"Erreur de conversion des dates : {e}")
+            raise ValueError(f"Erreur de conversion des dates : {e}")
         
     def detect_frequency(self, idx: pd.DatetimeIndex) -> str:
         """
@@ -75,13 +73,18 @@ class Outputs :
         sinon 'unknown'.
         """
         
-        freq = pd.infer_freq(idx)
-        if freq == 'D':
+        if not isinstance(idx, pd.DatetimeIndex):
+            raise TypeError(f"L'index doit être un DatetimeIndex, pas {type(idx)}")
+        
+        diff_days = idx.to_series().diff().dt.days.median()
+        
+        # Détermination de la fréquence
+        if diff_days == 1:
             return 'daily'
-        elif freq in ('M', 'MS', 'BM', 'BMS'):  # M=fin de mois, MS=début de mois…
+        elif 28 <= diff_days <= 31:
             return 'monthly'
         else:
-            return freq or 'unknown'
+            return 'unknown'
     
     def affiche(self) -> None:
         """
@@ -129,54 +132,13 @@ class Outputs :
 
         plt.close(fig)
 
-    def affiche_avec_filename(self, filename:str) -> None:
-        """
-        Paramètre d'entrée :
-        filename : nom donné au graphique à sauvergarder
-
-        Affiche un graphique permettant de comparer les debits observes et estimes sur la periode definie dans dates et enregistre le graphique sous le nom filename
-        """
-
-        freq = self.detect_frequency(self.dates)
-        if freq == "daily" :
-            label = "(mm/j)"
-        elif freq == "monthly" :
-            label = "(mm/month)"
-        else :
-            label = ""
-
-        fig = plt.figure(figsize=(12, 6))
-        ax = plt.gca()
-        
-        if self.has_Q_obs():
-            ax.plot(self.dates, self.Q_obs, 'k-', linewidth=1.5, label='Q mesuré (mm/j)')
-        ax.plot(self.dates, self.Q_pred, 'r-', linewidth=1.5, label='Q simulé (mm/j)')
-
-        locator = mdates.AutoDateLocator(minticks=6, maxticks=15)
-        ax.xaxis.set_major_locator(locator)
-        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-        
-        if self.has_crit():
-            ax.set_title(f"Débits - {self.name} {self.watershed_id} | crit = {self.crit}", fontsize=14)
-        else:
-            ax.set_title(f"Débits - {self.name} {self.watershed_id}", fontsize=14)
-        ax.set_xlabel('Temps')
-        ax.set_ylabel('Débit (mm/j)')
-        ax.grid(True, linestyle='--', alpha=0.7)
-        ax.legend()
-
-        print("affichage \n")
-        
-        plt.tight_layout()
-        
-        fig.savefig(filename, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-        
-
     def affiche_nuage(self) -> None:
         """
         Affiche un graphique permettant de comparer les debits observes et estimes sur la periode definie dans dates ainsi qu'un graphique "ratio" entre simulé et observé
         """
+
+        if not self.has_Q_obs():
+            raise AttributeError("Cette méthode nécessite des débits observés (Q_obs)")
 
         freq = self.detect_frequency(self.dates)
         if freq == "daily" :
@@ -188,8 +150,8 @@ class Outputs :
 
         fig, (a0, a1) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [3, 1]},figsize=(10,3))
         ax = a0
-        ax.plot(self.dates, self.Q_obs, color='k', lw=1, ls='-', zorder=0, label='observed')
-        ax.plot(self.dates, self.Q_pred, color='red', lw=1, label='modeled')
+        ax.plot(self.dates, self.Q_obs, color='k', lw=1, ls='-', zorder=0, label=f"Q mesuré {label}")
+        ax.plot(self.dates, self.Q_pred, color='red', lw=1, label=f"Q simulé {label}")
 
         # ax.plot(Rmod.index, Rmod*1000, color='blue', lw=2.5)
         ax.set_xlabel('Dates')

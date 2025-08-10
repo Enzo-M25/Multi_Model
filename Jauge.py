@@ -14,7 +14,7 @@ class Jauge :
     id (str) : identifiant du bassin versant
     csv_dir (str) : repertoire contenant le fichier de donnees
     csv_name (str) : nom du fichier de donnees
-    donnees (pd.Series) : fichier de donnes (provenant de la base CAMELS)
+    donnees (pd.DataFrame) : fichier de donnes (provenant de la base CAMELS)
     watershed (Pre_process) : objet watershed contenant des informations de base sur le bassin versant
     """
 
@@ -61,8 +61,8 @@ class Jauge :
         end : Date de fin de la période souhaitée (ex. '2010-12-31')
 
         Paramètre de sortie
-            Indexé par la fin de chaque mois (Timestamp)
-            contenant la somme des débits journaliers (tsd_q_mm) de ce mois
+            array par la fin de chaque mois
+            contenant la somme des débits journaliers du mois
         """
         
         df = self.donnees.copy()

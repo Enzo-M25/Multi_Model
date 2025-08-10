@@ -259,7 +259,7 @@ def erreur_modele_norm_hk(params_norm:float, compt:int, loghk_min_max:Tuple[floa
                                 watertable_depth=True,
                                 groundwater_flux=False,
                                 groundwater_storage=False,
-                                #intermittency_yearly=True,
+                                #intermittency_monthly=True,
                                 export_all_tif=False)
 
     # Matching streams
@@ -513,9 +513,6 @@ def erreur_modele_norm_sy(params_norm:float, compt:int, sy_min_max:Tuple[float,f
 
     if np.isnan(error) :
         return np.inf  # Large error if indicator is invalid
-    
-    optimization_results["model_name"] = model_name
-    optimization_results["model_modflow"] = model_modflow
 
     current_simulation = {
         "iteration": compt,
@@ -748,15 +745,15 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
     surfacewater_annual = surfacewater.resample('Y').sum().mean()
     Qsafran = groundwater_annual+surfacewater_annual
     F = Qobsyear / Qsafran
-
-    print (f'F = {F}')
+    
+    print(f'Facteur de normalisation F = {F}')
     R = R * F
     r = r * F
 
     # Frame settings
     r_steady=r.mean()
     R_steady=R.mean()
-    print(f"R mean: {R_steady}, r mean: {r_steady}")
+    print(f'R et r normalisés - Moyenne R: {R_steady:.4f}, Moyenne r: {r_steady:.4f}')
     print(f"R: {R}, r: {r}")
 
     # Frame settings
@@ -768,7 +765,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
     dis_perlen = True
 
     # Climatic settings
-    first_clim = 'mean' # or 'first or value
+    first_clim = 'first' # or 'first or value
     freq_time = freq_input
 
     # Hydraulic settings
@@ -911,21 +908,13 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
         print("\n=== RÉSULTATS DE L'OPTIMISATION ===")
         print(f"Conductivité hydraulique optimale: {best_hk/24/3600:.2e} m/s ({best_hk:.2e} m/jour)")
         print(f"Log(K) optimal: {best_log_hk:.4f}")
-        # print(f"Porosité efficace optimale: {best_sy:.4f}")
-        # print(f"Décroissance de la conductivité hydraulique optimale: {best_hk_decay:.3f} m")
-        # print(f"Épaisseur optimale: {best_thick:.2f} m")
-        # print(f"NSElog: {optimization_results.get('best_NSElog', 'N/A')}")
         print(f"distance optimale : {optimization_results.get('matchingstream', 'N/A')} m")
-        # logging.info(f"NSE: {optimization_results.get('best_nse', 'N/A')}")
-        # logging.info(f"R²: {optimization_results.get('best_r_squared', 'N/A')}")
-        # logging.info(f"RMSE: {optimization_results.get('best_rmse', 'N/A')} m³")
         print(f"Meilleur modèle: {optimization_results['model_name']}")
         print(f"Nombre de simulations: {compt}")
         print(f"Durée totale: {duration}")
 
         # Use the best parameters for the final run
         BV.hydraulic.update_hk(best_hk)
-        # BV.hydraulic.update_thick(best_thick)
 
         # Update the model name with the best parameters
         model_name = f"final_optimized_hk{best_hk/24/3600:.2e}"
@@ -978,7 +967,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
                                 watertable_depth=True,
                                 groundwater_flux=False,
                                 groundwater_storage=False,
-                                #intermittency_yearly=True,
+                                #intermittency_monthly=True,
                                 export_all_tif=False)
 
     fig, ax = plt.subplots(1, 1, figsize=(5,3), dpi=300)
@@ -1004,12 +993,6 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
                                                     r'_postprocess/_rasters/accumulation_flux_t(0).tif'))
     sim_river_data = np.ma.masked_where(sim_river_data <= 0, sim_river_data)
 
-    im_dem = ax.imshow(dem_data, alpha=0.5, cmap='Greys')
-    im_cont = ax.imshow(contour, alpha=1, cmap=mpl.colors.ListedColormap('k'))
-    im_obs = ax.imshow(obs_river_data, alpha=1, cmap=mpl.colors.ListedColormap('navy'))
-    im_sim = ax.imshow(sim_river_data, cmap=mpl.colors.ListedColormap('red'), alpha=0.7)
-    im_seep = ax.imshow(seep_river_data, cmap=mpl.colors.ListedColormap('darkorange'), alpha=0.7)
-
     ax.set_xlabel('X [pixels]')
     ax.set_ylabel('Y [pixels]')
 
@@ -1032,7 +1015,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
     dis_perlen = True
 
     # Climatic settings
-    first_clim = 'mean' # or 'first or value
+    first_clim = 'first' # or 'first or value
     freq_time = freq_input
 
     # Hydraulic settings
@@ -1049,9 +1032,6 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
     bc_left = None # or value
     bc_right = None # or value
     sea_level = 'None' # or value based on specific data : BV.oceanic.MSL
-    split_temp = True
-
-    iD_set_simulations = 'explorSy_test1'
 
     BV.add_settings()
     BV.add_climatic()
@@ -1136,6 +1116,7 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
         
         print(f"Bornes sy: [{sy_min:.4f}, {sy_max:.4f}] %")
         # Run the optimization using the Nelder-Mead method (Simplex)
+        
         result = minimize(
             erreur_modele_norm_sy, 
             x0_norm, 
@@ -1155,13 +1136,14 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
 
         end_time = datetime.now()
         duration = end_time - start_time
-
+        
+        # Affichage console pour retour utilisateur immédiat
         print("\n=== RÉSULTATS DE L'OPTIMISATION ===")
         print(f"Conductivité hydraulique optimale: {best_hk/24/3600:.2e} m/s ({best_hk:.2e} m/jour)")
         print(f"Porosité efficace optimale: {best_sy:.4f}")
-        print(f"crit: {optimization_results.get('best_crit', 'N/A')}")
-        print(f"distance optimale : {optimization_results.get('matchingstream', 'N/A')} m")
+        print(f"Critère optimal: {optimization_results.get('best_crit', 'N/A')}")
         print(f"Meilleur modèle: {optimization_results['model_name']}")
+        print(f"Distance optimale : {optimization_results.get('matchingstream', 'N/A')} m")
         print(f"Nombre de simulations: {compt}")
         print(f"Durée totale: {duration}")
 
@@ -1193,72 +1175,73 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
         optim_df.to_csv(os.path.join(optim_folder, f'optimization_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'), index=False)
 
         print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
+
+
+        BV.settings.update_model_name(model_name)
+        BV.settings.update_check_model(plot_cross=False, check_grid=True)
+
+        model_modflow = BV.preprocessing_modflow(for_calib=True)
+        success_modflow = BV.processing_modflow(model_modflow, write_model=True, run_model=True)
+
+        if not success_modflow:
+            print("Échec de la simulation!")
+
+        # Post-processing
+        BV.postprocessing_modflow(model_modflow,
+                                    watertable_elevation=True,
+                                    seepage_areas=True,
+                                    outflow_drain=True,
+                                    accumulation_flux=True,
+                                    watertable_depth=True,
+                                    groundwater_flux=False,
+                                    groundwater_storage=False,
+                                    #intermittency_monthly=True,
+                                    export_all_tif=False)
+
+        BV.postprocessing_timeseries(model_modflow=model_modflow,
+                                        model_modpath=None, 
+                                        datetime_format=True)
+
+        # Save the optimization results
+        optim_results = {
+            "best_hk": best_hk,
+            "best_hk_ms": best_hk/24/3600,
+            "best_log_hk": best_log_hk,  # Ajout du log(hk) dans les résultats
+            "best_sy": best_sy,
+            "best crit": optimization_results.get('best_crit'),
+            "optimization_start": start_time.strftime('%Y-%m-%d %H:%M:%S'),
+            "optimization_end": end_time.strftime('%Y-%m-%d %H:%M:%S'),
+            "best_model": optimization_results['model_name']
+        }
+
+        # Create optimization results folder if it doesn't exist
+        optim_df = pd.DataFrame([optim_results])
+        optim_df.to_csv(os.path.join(optim_folder, f'optimization_results.csv'), index=False)
+
+        # Qobs
+        s_obs = optimization_results['Qobs']
+        df_obs = s_obs.reset_index()
+        df_obs.columns = ['date', 'Qobs']
+        df_obs['date'] = pd.to_datetime(df_obs['date'])
+        df_obs.to_csv(
+            os.path.join(optim_folder, 'optimization_results_qobs.csv'),
+            index=False
+        )
+
+        # Qmod
+        s_obs = optimization_results['Qmod']
+        df_obs = s_obs.reset_index()
+        df_obs.columns = ['date', 'Qmod']
+        df_obs['date'] = pd.to_datetime(df_obs['date'])
+        df_obs.to_csv(
+            os.path.join(optim_folder, 'optimization_results_qmod.csv'),
+            index=False
+        )
+
+        print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
+    
     else: 
         print("Optimisation désactivée, utilisation des paramètres définis manuellement.")
-
-
-    BV.settings.update_model_name(model_name)
-    BV.settings.update_check_model(plot_cross=False, check_grid=True)
-
-    model_modflow = BV.preprocessing_modflow(for_calib=True)
-    success_modflow = BV.processing_modflow(model_modflow, write_model=True, run_model=True)
-
-    if not success_modflow:
-        print("Échec de la simulation!")
-
-    # Save the optimization results
-    optim_results = {
-        "best_hk": best_hk,
-        "best_hk_ms": best_hk/24/3600,
-        "best_log_hk": best_log_hk,  # Ajout du log(hk) dans les résultats
-        "best_sy": best_sy,
-        "best crit": optimization_results.get('best_crit'),
-        "optimization_start": start_time.strftime('%Y-%m-%d %H:%M:%S'),
-        "optimization_end": end_time.strftime('%Y-%m-%d %H:%M:%S'),
-        "best_model": optimization_results['model_name']
-    }
-
-    # Create optimization results folder if it doesn't exist
-    optim_df = pd.DataFrame([optim_results])
-    optim_df.to_csv(os.path.join(optim_folder, f'optimization_results.csv'), index=False)
-
-    # Qobs
-    s_obs = optimization_results['Qobs']
-    df_obs = s_obs.reset_index()
-    df_obs.columns = ['date', 'Qobs']
-    df_obs['date'] = pd.to_datetime(df_obs['date'])
-    df_obs.to_csv(
-        os.path.join(optim_folder, 'optimization_results_qobs.csv'),
-        index=False
-    )
-
-    # Qmod
-    s_obs = optimization_results['Qmod']
-    df_obs = s_obs.reset_index()
-    df_obs.columns = ['date', 'Qmod']
-    df_obs['date'] = pd.to_datetime(df_obs['date'])
-    df_obs.to_csv(
-        os.path.join(optim_folder, 'optimization_results_qmod.csv'),
-        index=False
-    )
-
-    print(f"Résultats d'optimisation sauvegardés dans {optim_folder}")
-
-    # Post-processing
-    BV.postprocessing_modflow(model_modflow,
-                                watertable_elevation=True,
-                                seepage_areas=True,
-                                outflow_drain=True,
-                                accumulation_flux=True,
-                                watertable_depth=True,
-                                groundwater_flux=False,
-                                groundwater_storage=False,
-                                #intermittency_yearly=True,
-                                export_all_tif=False)
-
-    BV.postprocessing_timeseries(model_modflow=model_modflow,
-                                    model_modpath=None, 
-                                    datetime_format=True)
 
 
     ### Formating Qobs Gauged station csv
@@ -1331,11 +1314,12 @@ def calibration(nom_bv: str, first_year: int, last_year: int, freq_input: str, d
     NSElog = he.evaluator(he.nse, Qmod_stat, Qobs_stat, transform='log')[0]
     RMSE = np.sqrt(np.nanmean((Qobs_stat.values-Qmod_stat.values)**2))
     KGE = he.evaluator(he.kge, Qmod_stat, Qobs_stat)[0][0]
-    print(model_name.upper())
-    print(f" NSE {NSE}")
-    print(f" NSElog {NSElog}")
-    print(f" RMSE {RMSE}")
-    print(f" KGE {KGE}")
+    print(f"=== Résultats finaux de calibration pour {model_name.upper()} ===")
+    print(f"NSE = {NSE:.4f}")
+    print(f"NSElog = {NSElog:.4f}")
+    print(f"RMSE = {RMSE:.4f}")
+    print(f"KGE = {KGE:.4f}")
+    print(f"Valeurs de Qmod - Min: {Qmod.min():.4f}, Max: {Qmod.max():.4f}, Moyenne: {Qmod.mean():.4f}")
 
         # Store metrics in DataFrame
     metrics_df = pd.DataFrame({
