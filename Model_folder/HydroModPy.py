@@ -120,7 +120,7 @@ class HydroModPy(Model):
 
         # print("début calibration HydroModPy")
         
-        # donnees necessaire pour l'environnement hydromodpy-0.1
+        # donnees necessaires pour l'environnement hydromodpy-0.1
         env = os.environ.copy()
         
         gdal_bin = os.path.join(self.env_root, "Library", "bin")
@@ -134,7 +134,7 @@ class HydroModPy(Model):
         # Chemin du script à exécuter
         script_path = os.path.join(self.example_path, "calib.py")
         
-        # Construction de la liste d'arguments str
+        # Construction de la liste d'arguments pour la fonction calibration de HydroModPy
         str_args = [
             bv.watershed.basin_name,
             str(self.t_calib_start.year),
@@ -149,6 +149,7 @@ class HydroModPy(Model):
             self.fct_calib
         ]
 
+        # Données à transmettre à subprocess
         cmd = [self.python_exe, script_path, *str_args, "--transfo",  *self.transfo]
 
         if self.has_dict_crit() and self.fct_calib == "crit_mix":
@@ -156,6 +157,7 @@ class HydroModPy(Model):
             weights_list = [str(w) for w in self.dict_crit.values()]
             cmd += ["--crit_list", *crit_list, "--weights_list", *weights_list,]
         
+        # Exécution du script HydroModPy avec subprocess
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -163,6 +165,7 @@ class HydroModPy(Model):
             env=env
         )
         
+        # Vérification de l'exécution du script
         if result.returncode != 0:
             print("Erreur d'exécution :", file=sys.stderr)
             print(result.stderr, file=sys.stderr)

@@ -9,6 +9,7 @@ from config import (
     RESULTS_DIR,
     DEM_FILE,
     STATIONS_DIR,
+    PARAM_CONFIG,
     WATERSHED_CONFIG
 )
 
@@ -191,21 +192,21 @@ def main():
 
     bv = Jauge(id, nom, STATIONS_DIR, fichier, watershed)
 
-    # watershed.pre_processing()
+    watershed.pre_processing()
 
     # Paramètres de la calibration
 
-    fct_calib = "crit_NSE"
+    fct_calib = PARAM_CONFIG["fct_calib"]
 
-    transfo = ["log"]
-    dict_crit = None #{"crit_KGE": 0.5, "crit_NSE": 0.5}
+    transfo = PARAM_CONFIG["transfo"]
+    dict_crit = PARAM_CONFIG["dict_crit"] #{"crit_KGE": 0.5, "crit_NSE": 0.5}
 
-    t_calib_start = parse_date("2005-01-01") 
-    t_calib_end = parse_date("2010-12-31")
-    t_valid_start = parse_date("2010-01-01")
-    t_valid_end = parse_date("2020-12-31")
-    t_prev_start = parse_date("2021-01-01") # pour hydromodpy l'année doit être complète pour les comparaisons
-    t_prev_end = parse_date("2021-12-31")
+    t_calib_start = parse_date(PARAM_CONFIG["t_calib_start"]) 
+    t_calib_end = parse_date(PARAM_CONFIG["t_calib_end"])
+    t_valid_start = parse_date(PARAM_CONFIG["t_valid_start"])
+    t_valid_end = parse_date(PARAM_CONFIG["t_valid_end"])
+    t_prev_start = parse_date(PARAM_CONFIG["t_prev_start"]) # pour hydromodpy l'année doit être complète pour les comparaisons
+    t_prev_end = parse_date(PARAM_CONFIG["t_prev_end"])
 
     if t_calib_start > t_calib_end or t_valid_start > t_valid_end or t_prev_start > t_prev_end :
         raise ValueError(f"Format invalide pour une période, début et fin inversé")
@@ -242,33 +243,33 @@ def main():
     
     ### HYDROMODPY
 
-    model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
-                          HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
-    model3.param_calib(bv)
-    print("\n=== Résultats du modèle HydroModPy ===")
-    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
-    print("Paramètres calibrés :")
-    print(f"  Sy      : {model3.sy}")
-    print(f"  hk(m/s) : {model3.hk}")
-    print("===============================\n")
-    mac.add_model(model3)
+    # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+    #                       HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
+    # model3.param_calib(bv)
+    # print("\n=== Résultats du modèle HydroModPy ===")
+    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    # print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
+    # print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
+    # print("Paramètres calibrés :")
+    # print(f"  Sy      : {model3.sy}")
+    # print(f"  hk(m/s) : {model3.hk}")
+    # print("===============================\n")
+    # mac.add_model(model3)
 
     ### HYDROMODPY avec calibration sur le réseau hydro
 
-    model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
-                        HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
-    model4.param_calib_reseau(bv)
-    print("\n=== Résultats du modèle HydroModPy avec calibration du réseau hydro ===")
-    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    print(f"{fct_calib} calibration : {model4.crit_calib:.4f}")
-    print(f"{fct_calib} validation : {model4.crit_valid:.4f}")
-    print("Paramètres calibrés :")
-    print(f"  Sy      : {model4.sy}")
-    print(f"  hk(m/s) : {model4.hk}")
-    print("===============================\n")
-    mac.add_model(model4)
+    # model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+    #                     HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
+    # model4.param_calib_reseau(bv)
+    # print("\n=== Résultats du modèle HydroModPy avec calibration du réseau hydro ===")
+    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    # print(f"{fct_calib} calibration : {model4.crit_calib:.4f}")
+    # print(f"{fct_calib} validation : {model4.crit_valid:.4f}")
+    # print("Paramètres calibrés :")
+    # print(f"  Sy      : {model4.sy}")
+    # print(f"  hk(m/s) : {model4.hk}")
+    # print("===============================\n")
+    # mac.add_model(model4)
 
     try:
         best = mac.comparaison_models(fct_calib)
@@ -286,3 +287,5 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+# TODO rajouter un code pour permettre de refaire une prédiction sur une autre période sans recalculer les paramètres du modèle

@@ -46,7 +46,7 @@ class Choix :
             'crit_NSE': {'objective': 'maximize', 'threshold': 0.1},
             'crit_NSE_log': {'objective': 'maximize', 'threshold': 0.1},
             'crit_KGE': {'objective': 'maximize', 'threshold': 0.1},
-            'crit_RMSE': {'objective': 'minimize', 'threshold': 0.5}, #TODO 
+            'crit_RMSE': {'objective': 'minimize', 'threshold': 0.5}, #TODO appeler la valeur epsilon
             'crit_Biais': {'objective': 'zero', 'threshold': 5},
         }
 
@@ -64,10 +64,12 @@ class Choix :
         best_value = -np.inf if config['objective'] == 'maximize' else np.inf
         best_index = -1
 
+        # epsilon = config['threshold']
+
         for i, model in enumerate(self.models):
             # Vérification de la cohérence calibration/validation
             diff = abs(model.crit_calib - model.crit_valid)
-            if diff > config['threshold']:
+            if diff > config['threshold']:  #TODO
                 continue
 
             # Évaluation de la performance
@@ -84,12 +86,12 @@ class Choix :
         for i, model in enumerate(self.models):
             # Vérification de la cohérence calibration/validation
             diff = abs(model.crit_calib - model.crit_valid)
-            if diff > config['threshold']:
+            if diff > config['threshold']: #TODO
                 continue
 
             # Évaluation de la performance
             current_value = model.crit_calib
-            if (abs(best_value-current_value) < 0.05): #TODO valeur à adapter ?
+            if (abs(best_value-current_value) < 0.05): #TODO valeur à adapter ? TODO remplacer par epsilon/2
                 list_best_models.append(model)
         
         print(f"\n=== Modèle(s) sélectionné(s) : {[m.nom_model for m in list_best_models]} === \n")

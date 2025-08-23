@@ -105,32 +105,59 @@ def parse_date(d:str) -> datetime :
     except ValueError:
         raise ValueError(f"Format invalide pour la date : {d} (attendu YYYY-MM-DD)")
 
-def empty_result_dict(nom, id):
-    return {
-        "nom": nom,
-        "station_id": id,
-        "RL_best": "No",
-        "alpha_RL": None,
-        "Vmax_RL": None,
-        "calib_RL": None,
-        "valid_RL": None,
-        "prev_RL": None,
-        "GR4J_best": "No",
-        "params_GR4J": None,
-        "calib_GR4J": None,
-        "valid_GR4J": None,
-        "prev_GR4J": None,
-        "HMP_best": "No",
-        "params_HMP": {"sy": None, "hk": None},
-        "calib_HMP": None,
-        "valid_HMP": None,
-        "prev_HMP": None,
-        "HMP_reseau_best": "No",
-        "params_HMP_reseau": {"sy": None, "hk": None},
-        "calib_HMP_reseau": None,
-        "valid_HMP_reseau": None,
-        "prev_HMP_reseau": None,
+def make_empty_results(nom=None, station_id=None):
+    """
+    Retourne deux dictionnaires (res1, res2) contenant toutes les clés attendues,
+    initialisées à None sauf 'nom' et 'station_id'.
+    """
+    res1 = {
+        "nom"                 : nom,
+        "station_id"          : station_id,
+        "RL_best"             : None,
+        "alpha_RL"            : None,
+        "Vmax_RL"             : None,
+        "calib_RL"            : None,
+        "valid_RL"            : None,
+        "prev_RL"             : None,
+        "GR4J_best"           : None,
+        "params_GR4J"         : None,
+        "calib_GR4J"          : None,
+        "valid_GR4J"          : None,
+        "prev_GR4J"           : None,
+        "HMP_best"            : None,
+        "params_HMP"          : {"sy": None, "hk": None},
+        "calib_HMP"           : None,
+        "valid_HMP"           : None,
+        "prev_HMP"            : None,
+        "HMP_reseau_best"     : None,
+        "params_HMP_reseau"   : {"sy": None, "hk": None},
+        "calib_HMP_reseau"    : None,
+        "valid_HMP_reseau"    : None,
+        "prev_HMP_reseau"     : None,
     }
+
+    res2 = {
+        "nom"                 : nom,
+        "station_id"          : station_id,
+        "RL_best"             : None,
+        "alpha_RL"            : None,
+        "Vmax_RL"             : None,
+        "calib_RL"            : None,
+        "valid_RL"            : None,
+        "prev_RL"             : None,
+        "GR4J_best"           : None,
+        "params_GR4J"         : None,
+        "calib_GR4J"          : None,
+        "valid_GR4J"          : None,
+        "prev_GR4J"           : None,
+        "HMP_reseau_best"     : None,
+        "params_HMP_reseau"   : {"sy": None, "hk": None},
+        "calib_HMP_reseau"    : None,
+        "valid_HMP_reseau"    : None,
+        "prev_HMP_reseau"     : None,
+    }
+
+    return res1, res2
 
 dossier = STATIONS_DIR
 
@@ -149,6 +176,8 @@ t_prev_end = parse_date("2021-12-31")
 def process_file(args):
 
     nom, id, x, y, departement = args
+    
+    res1, res2 = make_empty_results(nom, id)
 
     # Vérifier que le fichier existe
     fichier = f"CAMELS_FR_tsd_{id}.csv"
@@ -169,8 +198,8 @@ def process_file(args):
     best_RL2 = best_GR4J2 = best_HMP_reseau2 = "No"
 
     # valeurs par défaut
-    res1 = empty_result_dict(nom, id)
-    res2 = empty_result_dict(nom, id)
+    # res1 = empty_result_dict(nom, id)
+    # res2 = empty_result_dict(nom, id)
 
     try :
     
@@ -326,12 +355,16 @@ def main():
     df_ref = pd.read_csv("ref_stations.csv", sep=";")
     args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"], df_ref["Département"]))
 
-    n_procs = 8
+    n_procs = 9
     print(f"Démarrage du pool avec {n_procs} processus...")
 
     start = time.time()
     with Pool(n_procs) as pool:
-        results = pool.map(process_file, args_list)  # results est une liste de tuples (res1, res2)
+        # Répartition dynamique : chunksize=1 => chaque tâche est dispatchée indépendamment
+        results = list(pool.imap_unordered(process_file, args_list, chunksize=1))
+
+        # ancienne méthode chaque coeur obtient une liste à traiter
+        #results = pool.map(process_file, args_list)  # results est une liste de tuples (res1, res2)
     elapsed = time.time() - start
 
     # unzip

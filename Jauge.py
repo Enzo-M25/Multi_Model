@@ -11,7 +11,7 @@ class Jauge :
     Fonctionne pour l'instant en recuperant les donnees en format csv
 
     Attributs
-    id (str) : identifiant du bassin versant
+    id, nom (str) : identifiant et nom du bassin versant
     csv_dir (str) : repertoire contenant le fichier de donnees
     csv_name (str) : nom du fichier de donnees
     donnees (pd.DataFrame) : fichier de donnes (provenant de la base CAMELS)
