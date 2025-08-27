@@ -33,33 +33,17 @@ PARAM_CONFIG = {
 # Configuration du bassin versant
 
 WATERSHED_CONFIG = {
-    "nom": "Flume",
-    "id": "J721401001",
-    "x": 344949,
-    "y": 6797491,
-    "num_dep": 35
+    "nom": "Guillec",
+    "id": "J302401001",
+    "x": 179067,
+    "y": 6858450,
+    "num_dep": 29
 }
 
 # WATERSHED_CONFIG = {
-#     "nom": "Arguenon",
-#     "id": "J110301001",
-#     "x": 305570,
-#     "y": 6824711,
+#     "nom": "Maudouve",
+#     "id": "J152401001",
+#     "x": 268082,
+#     "y": 6834560,
 #     "num_dep": 22
-# }
-
-# WATERSHED_CONFIG = {
-#     "nom": "Goyen",
-#     "id": "J401401001",
-#     "x": 143849,
-#     "y": 6797335,
-#     "num_dep": 29
-# }
-
-# WATERSHED_CONFIG = {
-#     "nom": "Canut-Sud",
-#     "id": "J797301001",
-#     "x": 327336,
-#     "y": 6753517,
-#     "num_dep": 35
 # }

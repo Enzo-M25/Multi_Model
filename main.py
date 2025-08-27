@@ -192,7 +192,7 @@ def main():
 
     bv = Jauge(id, nom, STATIONS_DIR, fichier, watershed)
 
-    watershed.pre_processing()
+    #watershed.pre_processing()
 
     # Paramètres de la calibration
 
@@ -213,6 +213,7 @@ def main():
 
     mac = Choix()
 
+    print(f"\n=== {nom} ===")
 
     # Réservoir linéaire
     
@@ -258,18 +259,18 @@ def main():
 
     ### HYDROMODPY avec calibration sur le réseau hydro
 
-    # model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
-    #                     HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
-    # model4.param_calib_reseau(bv)
-    # print("\n=== Résultats du modèle HydroModPy avec calibration du réseau hydro ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"{fct_calib} calibration : {model4.crit_calib:.4f}")
-    # print(f"{fct_calib} validation : {model4.crit_valid:.4f}")
-    # print("Paramètres calibrés :")
-    # print(f"  Sy      : {model4.sy}")
-    # print(f"  hk(m/s) : {model4.hk}")
-    # print("===============================\n")
-    # mac.add_model(model4)
+    model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
+                        HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
+    model4.param_calib_reseau(bv)
+    print("\n=== Résultats du modèle HydroModPy avec calibration du réseau hydro ===")
+    print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
+    print(f"{fct_calib} calibration : {model4.crit_calib:.4f}")
+    print(f"{fct_calib} validation : {model4.crit_valid:.4f}")
+    print("Paramètres calibrés :")
+    print(f"  Sy      : {model4.sy}")
+    print(f"  hk(m/s) : {model4.hk}")
+    print("===============================\n")
+    mac.add_model(model4)
 
     try:
         best = mac.comparaison_models(fct_calib)
@@ -281,6 +282,17 @@ def main():
             # Calcul et affichage du critère de prévision
             crit = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
             print(f'{fct_calib} : {crit}')
+
+            print("\n=== Tous les critères ===")
+
+            crit = critere_prevision(model, Q_obs, Q_sim, "crit_NSE", transfo, dict_crit)
+            print(f'"crit_NSE" : {crit}')
+            crit = critere_prevision(model, Q_obs, Q_sim, "crit_KGE", transfo, dict_crit)
+            print(f'"crit_KGE" : {crit}')
+            crit = critere_prevision(model, Q_obs, Q_sim, "crit_RMSE", transfo, dict_crit)
+            print(f'"crit_RMSE" : {crit}')
+            crit = critere_prevision(model, Q_obs, Q_sim, "crit_Biais", transfo, dict_crit)
+            print(f'"crit_Biais" : {crit}')
 
     except ValueError as e:
         print(f"Erreur lors de la sélection du modèle : {e}")
