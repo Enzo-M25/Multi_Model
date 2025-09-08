@@ -175,6 +175,8 @@ t_prev_end = parse_date("2021-12-31")
 
 def process_file(args):
 
+    start = time.time()
+
     nom, id, x, y, departement = args
     
     res1, res2 = make_empty_results(nom, id)
@@ -218,17 +220,17 @@ def process_file(args):
 
         bv = Jauge(id, nom, dossier, fichier, watershed)
 
-        mac = Choix()
+        # mac = Choix()
         mac2 = Choix()
         
         model1 = RL(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
         model1.param_calib(bv)
-        mac.add_model(model1)
+        # mac.add_model(model1)
         mac2.add_model(model1)
         
         model2 = GR4J(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib)
         model2.param_calib(bv)
-        mac.add_model(model2)
+        # mac.add_model(model2)
         mac2.add_model(model2)
         
         # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
@@ -239,7 +241,7 @@ def process_file(args):
         model4 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
                             HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
         model4.param_calib_reseau(bv)
-        mac.add_model(model4)
+        # mac.add_model(model4)
         mac2.add_model(model4)
 
         # best = mac.comparaison_models(fct_calib) # best est une liste de model
@@ -290,6 +292,8 @@ def process_file(args):
                 best_HMP_reseau2 = "Yes"
                 crit_prev_HMP_reseau2 = critere_prevision(model, Q_obs, Q_sim, fct_calib, transfo, dict_crit)
 
+        cpu_time_used = time.time() - start
+
         # res1 = {
         #     "nom"         : nom,
         #     "station_id"  : id,
@@ -337,6 +341,7 @@ def process_file(args):
             "calib_HMP_reseau": getattr(model4, "crit_calib", None),
             "valid_HMP_reseau": getattr(model4, "crit_valid", None),
             "prev_HMP_reseau": crit_prev_HMP_reseau2,
+            "time_s"  : cpu_time_used
         }
 
     except Exception as e:
@@ -351,23 +356,21 @@ def main():
     df_ref = pd.read_csv("ref_stations_autres.csv", sep=";")
     args_list = list(zip(df_ref["Name"], df_ref["id"], df_ref["x"], df_ref["y"], df_ref["Département"]))
 
-    n_procs = 8
+    n_procs = 9
     print(f"Démarrage du pool avec {n_procs} processus...")
 
-    start = time.time()
     with Pool(n_procs) as pool:
         # Répartition dynamique : chunksize=1 => chaque tâche est dispatchée indépendamment
         results = list(pool.imap_unordered(process_file, args_list, chunksize=1))
 
         # ancienne méthode chaque coeur obtient une liste à traiter
         #results = pool.map(process_file, args_list)  # results est une liste de tuples (res1, res2)
-    elapsed = time.time() - start
 
     # unzip
     # rows1 = [r[0] for r in results]
     # rows2 = [r[1] for r in results]
 
-    rows = [r[0] for r in results]
+    rows = results
 
     # Création du DataFrame et export
 
@@ -375,12 +378,10 @@ def main():
     # path_avec = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_avecHMP.csv")
     # pd.DataFrame(rows1).to_csv(path_avec, index=False)
 
-    path_sans = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_manquant.csv")
+    path_sans = os.path.join(script_dir, f"Multi_mod_calibration_{fct_calib}_{transfo}_time.csv")
     pd.DataFrame(rows).to_csv(path_sans, index=False)
-    pd.DataFrame([{"elapsed_time_s": elapsed}]).to_csv(path_sans, mode="a", header=False, index=False)
 
     print(f"Résumé des calibrations pour {fct_calib} et transfo {transfo} écrit dans {script_dir}")
-    print(f"⏱️ Temps parallèle : {elapsed:.2f}s")
 
 if __name__ == "__main__":
     

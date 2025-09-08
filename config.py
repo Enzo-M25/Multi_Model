@@ -39,11 +39,3 @@ WATERSHED_CONFIG = {
     "y": 6858450,
     "num_dep": 29
 }
-
-# WATERSHED_CONFIG = {
-#     "nom": "Maudouve",
-#     "id": "J152401001",
-#     "x": 268082,
-#     "y": 6834560,
-#     "num_dep": 22
-# }

@@ -123,7 +123,7 @@ def generate_plots(model: Model, bv: Jauge, nom: str, id: str, t_prev_start: dat
     Q_obs, Q_sim: Les débits observés et simulés
     """
     # Création du répertoire pour les figures
-    main_dir = os.path.dirname(os.path.abspath(__file__))
+    main_dir = os.path.dirname(os.path.abspath(__file__), "Results")
     figures_dir = os.path.join(main_dir, f"figures_{nom}_{t_prev_start.year}_{t_prev_end.year}")
     os.makedirs(figures_dir, exist_ok=True)
 
@@ -192,7 +192,7 @@ def main():
 
     bv = Jauge(id, nom, STATIONS_DIR, fichier, watershed)
 
-    #watershed.pre_processing()
+    # watershed.pre_processing()
 
     # Paramètres de la calibration
 
@@ -241,21 +241,6 @@ def main():
         print(f"  X{i} : {val}")
     print("===============================\n")
     mac.add_model(model2)
-    
-    ### HYDROMODPY
-
-    # model3 = HydroModPy(t_calib_start, t_calib_end, t_valid_start, t_valid_end, t_prev_start, t_prev_end, transfo, fct_calib,
-    #                       HYDROMODPY_FUNCTIONS, 'M', METEO_DIR, dict_crit=None)
-    # model3.param_calib(bv)
-    # print("\n=== Résultats du modèle HydroModPy ===")
-    # print(f"\n résultats calculés avec le(s) critère(s) : {fct_calib} et une transformation : {transfo}")
-    # print(f"{fct_calib} calibration : {model3.crit_calib:.4f}")
-    # print(f"{fct_calib} validation : {model3.crit_valid:.4f}")
-    # print("Paramètres calibrés :")
-    # print(f"  Sy      : {model3.sy}")
-    # print(f"  hk(m/s) : {model3.hk}")
-    # print("===============================\n")
-    # mac.add_model(model3)
 
     ### HYDROMODPY avec calibration sur le réseau hydro
 
@@ -300,4 +285,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-# TODO rajouter un code pour permettre de refaire une prédiction sur une autre période sans recalculer les paramètres du modèle
+# TODO rajouter un code pour permettre de refaire une prédiction sur une autre période sans recalculer les paramètres du modèle faire un autre main ?
+# TODO rajouter la possibilité de garder une trace écrite des paramètres dans un ficher et possibilité de les récupérer pour une nouvelle prévision
+# TODO rajouter la possibilité de faire une prévision avec des données météo futures (fichier météo en entrée)
